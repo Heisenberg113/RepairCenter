@@ -5,7 +5,7 @@ public interface IAccountService
     Task<AccountResult<(User User, string Token, DateTime ExpiresAt)>> LoginAsync(string userName, string password);
     Task<List<User>> GetAllAsync();
     Task<List<string>> GetRolesAsync();
-    Task<AccountResult<User>> CreateAsync(User user, string password, IEnumerable<string> roles);
+    Task<AccountResult<(User User, string TemporaryPassword)>> CreateAsync(User user, IEnumerable<string> roles);
     Task<AccountResult<User>> SetRolesAsync(int id, IEnumerable<string> roles);
     Task<AccountResult<User>> SetActiveAsync(int id, bool active);
     Task<AccountResult<User>> RevokeTokensAsync(int id);

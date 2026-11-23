@@ -45,21 +45,21 @@ public class AccountService(IAccountRepository repository, IPasswordHasher<User>
     public async Task<List<User>> GetAllAsync() => await repository.GetAllAsync();
     public async Task<List<string>> GetRolesAsync() => (await repository.GetAllRolesAsync()).Select(x => x.Name).ToList();
 
-    public async Task<AccountResult<User>> CreateAsync(User user, string password, IEnumerable<string> roleNames)
+    public async Task<AccountResult<(User User, string TemporaryPassword)>> CreateAsync(User user, IEnumerable<string> roleNames)
     {
-        if (!StrongPassword(password)) return AccountResult<User>.Failure(AccountError.InvalidPassword);
         user.UserName = user.UserName.Trim(); user.Email = user.Email.Trim().ToLowerInvariant();
         user.FullName = user.FullName.Trim(); user.PhoneNumber = Normalize(user.PhoneNumber);
-        if (await repository.IdentityExistsAsync(user.UserName, user.Email)) return AccountResult<User>.Failure(AccountError.DuplicateIdentity);
+        if (await repository.IdentityExistsAsync(user.UserName, user.Email)) return AccountResult<(User, string)>.Failure(AccountError.DuplicateIdentity);
         var roles = await repository.GetRolesAsync(roleNames);
-        if (!roleNames.Any() || roles.Count != roleNames.Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count())
-            return AccountResult<User>.Failure(AccountError.InvalidRoles);
+        if (roleNames.Count() != 1 || roles.Count != 1 || roles.Count != roleNames.Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count())
+            return AccountResult<(User, string)>.Failure(AccountError.InvalidRoles);
         if (roles.Any(x => x.Name == "Technician") && !await repository.HasActiveTechnicianProfileAsync(user.Id))
-            return AccountResult<User>.Failure(AccountError.TechnicianProfileRequired);
-        user.PasswordHash = hasher.HashPassword(user, password);
+            return AccountResult<(User, string)>.Failure(AccountError.TechnicianProfileRequired);
+        var temporaryPassword = GenerateTemporaryPassword();
+        user.PasswordHash = hasher.HashPassword(user, temporaryPassword);
         user.MustChangePassword = true;
         await repository.AddAsync(user, roles);
-        return AccountResult<User>.Success(user);
+        return AccountResult<(User, string)>.Success((user, temporaryPassword));
     }
 
     public async Task<AccountResult<User>> SetRolesAsync(int id, IEnumerable<string> roleNames)
@@ -68,7 +68,7 @@ public class AccountService(IAccountRepository repository, IPasswordHasher<User>
         if (user is null) return AccountResult<User>.Failure(AccountError.AccountNotFound);
         var names = roleNames.ToArray();
         var roles = await repository.GetRolesAsync(names);
-        if (!names.Any() || roles.Count != names.Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count())
+        if (names.Length != 1 || roles.Count != 1 || roles.Count != names.Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count())
             return AccountResult<User>.Failure(AccountError.InvalidRoles);
         if (roles.Any(x => x.Name == "Technician") && !await repository.HasActiveTechnicianProfileAsync(user.Id))
             return AccountResult<User>.Failure(AccountError.TechnicianProfileRequired);

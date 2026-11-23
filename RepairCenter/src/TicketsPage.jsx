@@ -58,7 +58,6 @@ export default function TicketsPage() {
         <label className="ticket-date-filter">Tiếp nhận từ<input aria-label="Ngày tiếp nhận từ" type="date" value={receivedFrom} max={receivedTo || undefined} onChange={e => setReceivedFrom(e.target.value)} /></label>
         <label className="ticket-date-filter">Đến ngày<input aria-label="Ngày tiếp nhận đến" type="date" value={receivedTo} min={receivedFrom || undefined} onChange={e => setReceivedTo(e.target.value)} /></label>
         {(receivedFrom || receivedTo) && <button className="button" onClick={() => { setReceivedFrom(''); setReceivedTo(''); }}>Xóa ngày lọc</button>}
-        {b().can('Admin', 'Receptionist') && <button className="button primary" onClick={b().openIntake}>＋ Tiếp nhận phiếu</button>}
       </div>
       {error && (
         <div className="panel">

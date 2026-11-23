@@ -18,16 +18,21 @@ public class AccountsController(IAccountService accounts) : ControllerBase
     public async Task<ActionResult<IEnumerable<string>>> GetRoles() => Ok(await accounts.GetRolesAsync());
 
     [HttpPost]
-    public async Task<ActionResult<AccountResponse>> Create(CreateAccountRequest request)
+    public async Task<ActionResult<object>> Create(CreateAccountRequest request)
     {
         var user = new User
         {
             UserName = request.UserName, FullName = request.FullName, Email = request.Email,
             PhoneNumber = request.PhoneNumber, PasswordHash = string.Empty
         };
-        var result = await accounts.CreateAsync(user, request.Password, request.Roles);
+        var result = await accounts.CreateAsync(user, request.Roles);
         if (result.Error != AccountError.None) return Error(result.Error);
-        return CreatedAtAction(nameof(GetAll), ToResponse(result.Value!));
+        var created = result.Value;
+        return CreatedAtAction(nameof(GetAll), null, new
+        {
+            account = ToResponse(created.User),
+            temporaryPassword = created.TemporaryPassword
+        });
     }
 
     [HttpPut("{id:int}/roles")]
