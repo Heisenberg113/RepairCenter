@@ -34,8 +34,8 @@ function PageHeading(){
   return h('div',null,h('p',{className:'eyebrow',id:'crumb'},crumb),h('h1',{id:'page-title'},title));
 }
 function UserProfile(){
-  const [user,setUser]=React.useState(window.repairCenterBridge?.user||null),[roles,setRoles]=React.useState([]);
-  React.useEffect(()=>{const update=()=>{setUser(window.repairCenterBridge?.user||null);setRoles(window.repairCenterBridge?.user?.roles||[])};window.addEventListener('repair-center-auth',update);return()=>window.removeEventListener('repair-center-auth',update)},[]);
+  const [user,setUser]=React.useState(window.repairCenterBridge?.user||null),[roles,setRoles]=React.useState(window.repairCenterBridge?.roles||window.repairCenterBridge?.user?.roles||[]);
+  React.useEffect(()=>{const update=()=>{setUser(window.repairCenterBridge?.user||null);setRoles(window.repairCenterBridge?.roles||window.repairCenterBridge?.user?.roles||[])};window.addEventListener('repair-center-auth',update);return()=>window.removeEventListener('repair-center-auth',update)},[]);
   const name=user?.fullName||'Người dùng';
   return h('div',{className:'user-chip'},h('div',{className:'avatar'},name.trim().charAt(0).toUpperCase()||'U'),h('div',{className:'user-meta'},h('strong',null,name),h('small',null,roles.join(' · '))),h('button',{className:'icon-button',title:'Đăng xuất',onClick:()=>window.logout?.(true)},'↗'));
 }
@@ -76,7 +76,7 @@ function AppShell() {
   },[]);
   const setMode=mode=>setAuth(v=>({...v,mode,authenticated:false}));
   return h(React.Fragment, null,
-    h(Login,{mode:auth.mode,onModeChange:setMode}),
+    h(Login,{mode:auth.authenticated?'app':auth.mode,onModeChange:setMode}),
     h('div', { id: 'app', className: `app-shell ${auth.authenticated?'':'hidden'}` },
       h('aside', { className: 'sidebar' },
         h('div', { className: 'brand' }, h('div', { className: 'brand-mark' }, 'R'),
@@ -119,6 +119,11 @@ window.mountInventoryReact = () => renderBusinessPage(InventoryPage);
 window.mountServicesReact = () => renderBusinessPage(ServicesPage);
 window.mountBillingReact = () => renderBusinessPage(BillingPage);
 window.mountWarrantiesReact = () => renderBusinessPage(WarrantiesPage);
+// app.js can request the initial route before this module finishes loading.
+// Mount the default page once its React entry point is available.
+if (window.repairCenterBridge?.token && !window.repairCenterBridge?.user?.mustChangePassword) {
+  window.mountOverviewReact();
+}
 window.unmountBusinessReact = () => {
   if (!businessRoot) return;
   flushSync(() => businessRoot.unmount());

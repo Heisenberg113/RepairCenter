@@ -8,6 +8,7 @@ public class RepairTicketResponse
     public string TicketNumber { get; set; } = string.Empty;
     public int CustomerId { get; set; }
     public string CustomerName { get; set; } = string.Empty;
+    public string? CustomerPhoneNumber { get; set; }
     public int DeviceId { get; set; }
     public int DeviceTypeId { get; set; }
     public int? TechnicianId { get; set; }

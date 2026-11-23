@@ -310,6 +310,7 @@ public class RepairTicketsController(IRepairTicketService service, IRepairTicket
         TicketNumber = ticket.TicketNumber,
         CustomerId = ticket.CustomerId,
         CustomerName = ticket.Customer?.Name ?? string.Empty,
+        CustomerPhoneNumber = ticket.Customer?.PhoneNumber,
         DeviceId = ticket.DeviceId,
         DeviceTypeId = ticket.Device.DeviceTypeId,
         TechnicianId = ticket.TechnicianId,

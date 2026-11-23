@@ -7,6 +7,8 @@ export default function TicketsPage() {
   const [rows, setRows] = useState([]);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
+  const [receivedFrom, setReceivedFrom] = useState('');
+  const [receivedTo, setReceivedTo] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -39,18 +41,23 @@ export default function TicketsPage() {
 
   const filtered = useMemo(() => rows.filter(t => {
     const state = b().enumKey(t.status);
-    const text = [t.ticketNumber, t.customerName, t.deviceBrand, t.deviceModel, t.issueDescription].join(' ').toLowerCase();
-    return (!status || state === status) && (!query || text.includes(query.toLowerCase()));
-  }), [rows, query, status]);
+    const text = [t.ticketNumber, t.customerName, t.customerPhoneNumber, t.deviceBrand, t.deviceModel, t.issueDescription].join(' ').toLowerCase();
+    const receivedDate = String(t.receivedAt || '').slice(0, 10);
+    return (!status || state === status) && (!query || text.includes(query.toLowerCase())) &&
+      (!receivedFrom || receivedDate >= receivedFrom) && (!receivedTo || receivedDate <= receivedTo);
+  }), [rows, query, status, receivedFrom, receivedTo]);
 
   return (
     <>
       <div className="toolbar">
-        <input className="search" placeholder="Tìm mã phiếu, khách hàng, thiết bị…" value={query} onChange={e => setQuery(e.target.value)} />
+        <input className="search" placeholder="Tìm mã phiếu, khách hàng, số điện thoại, thiết bị…" value={query} onChange={e => setQuery(e.target.value)} />
         <select value={status} onChange={e => setStatus(e.target.value)}>
           <option value="">Tất cả trạng thái</option>
           {Object.entries(b().statusLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select>
+        <label className="ticket-date-filter">Tiếp nhận từ<input aria-label="Ngày tiếp nhận từ" type="date" value={receivedFrom} max={receivedTo || undefined} onChange={e => setReceivedFrom(e.target.value)} /></label>
+        <label className="ticket-date-filter">Đến ngày<input aria-label="Ngày tiếp nhận đến" type="date" value={receivedTo} min={receivedFrom || undefined} onChange={e => setReceivedTo(e.target.value)} /></label>
+        {(receivedFrom || receivedTo) && <button className="button" onClick={() => { setReceivedFrom(''); setReceivedTo(''); }}>Xóa ngày lọc</button>}
         {b().can('Admin', 'Receptionist') && <button className="button primary" onClick={b().openIntake}>＋ Tiếp nhận phiếu</button>}
       </div>
       {error && (
@@ -74,7 +81,7 @@ export default function TicketsPage() {
             <table>
               <thead>
                 <tr>
-                  {['Mã phiếu', 'Khách hàng / Thiết bị', 'Kỹ thuật viên', 'Trạng thái', 'Tiếp nhận', ''].map(x => <th key={x}>{x}</th>)}
+                  {['Mã phiếu', 'Khách hàng / Thiết bị', 'Số điện thoại', 'Kỹ thuật viên', 'Trạng thái', 'Tiếp nhận', ''].map(x => <th key={x}>{x}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -82,13 +89,14 @@ export default function TicketsPage() {
                   <tr key={t.id}>
                     <td><button className="icon-action ticket-number" onClick={() => setSelectedId(t.id)}>{t.ticketNumber}</button></td>
                     <td>{t.customerName}<span className="secondary">{`${t.deviceBrand || ''} ${t.deviceModel || ''} · ${t.deviceType || ''}`}</span></td>
+                    <td>{t.customerPhoneNumber || '—'}</td>
                     <td>{t.technicianName || 'Chưa phân công'}</td>
                     <td><StatusBadge status={t.status} /></td>
                     <td>{b().date(t.receivedAt)}</td>
                     <td><button className="button small" onClick={() => setSelectedId(t.id)}>Mở phiếu</button></td>
                   </tr>
                 )) : (
-                  <tr><td colSpan="6" className="empty">Chưa có phiếu phù hợp</td></tr>
+                  <tr><td colSpan="7" className="empty">Chưa có phiếu phù hợp</td></tr>
                 )}
               </tbody>
             </table>
