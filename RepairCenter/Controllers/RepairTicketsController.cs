@@ -29,7 +29,8 @@ public class RepairTicketsController(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
-        if (page < 1 || pageSize is < 1 or > 100 || receivedFrom > receivedTo)
+        if (page < 1 || pageSize is < 1 or > 100 ||
+            page > int.MaxValue / pageSize + 1 || receivedFrom > receivedTo)
             return BadRequest(new ProblemDetails { Title = "Tham số phân trang hoặc bộ lọc không hợp lệ." });
 
         int? technicianUserId = null;
