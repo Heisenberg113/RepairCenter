@@ -15,7 +15,7 @@ public class RepairTicketDetailService(IRepairTicketDetailRepository repository)
     }
 
     public async Task<RepairTicketDetailResult<RepairTicketDetail>> AddRepairServiceAsync(
-        int ticketId, int serviceId, decimal quantity, decimal discountPercent,
+        int ticketId, int serviceId, decimal quantity, decimal discountPercent, int changedByUserId,
         int? warrantyDuration = null, RepairCenter.Enums.WarrantyDurationUnit? warrantyDurationUnit = null, string? warrantyTerms = null)
     {
         var ticket = await repository.GetTicketAsync(ticketId);
@@ -53,11 +53,11 @@ public class RepairTicketDetailService(IRepairTicketDetailRepository repository)
                 ? Normalize(warrantyTerms) : service.WarrantyTerms
         };
 
-        return await AddAsync(detail, null);
+        return await AddAsync(detail, null, changedByUserId, "Phát sinh dịch vụ khi đang sửa; chờ khách duyệt lại báo giá.");
     }
 
     public async Task<RepairTicketDetailResult<RepairTicketDetail>> AddSparePartAsync(
-        int ticketId, int sparePartId, decimal quantity, decimal discountPercent,
+        int ticketId, int sparePartId, decimal quantity, decimal discountPercent, int changedByUserId,
         int? warrantyDuration = null, RepairCenter.Enums.WarrantyDurationUnit? warrantyDurationUnit = null, string? warrantyTerms = null)
     {
         if (!await repository.TicketExistsAsync(ticketId))
@@ -108,12 +108,12 @@ public class RepairTicketDetailService(IRepairTicketDetailRepository repository)
             Note = $"Used for repair ticket {ticket.TicketNumber}"
         };
 
-        return await AddAsync(detail, stockOut);
+        return await AddAsync(detail, stockOut, changedByUserId, "Phát sinh phụ tùng khi đang sửa; chờ khách duyệt lại báo giá.");
     }
 
-    public async Task<RepairTicketDetailError> UpdateAsync(int ticketId, int detailId, decimal quantity, decimal discountPercent)
+    public async Task<RepairTicketDetailError> UpdateAsync(int ticketId, int detailId, decimal quantity, decimal discountPercent, int changedByUserId)
     {
-        var error = await repository.UpdateAsync(ticketId, detailId, quantity, discountPercent);
+        var error = await repository.UpdateAsync(ticketId, detailId, quantity, discountPercent, changedByUserId);
         return error switch
         {
             EditTicketDetailError.None => RepairTicketDetailError.None,
@@ -122,27 +122,29 @@ public class RepairTicketDetailService(IRepairTicketDetailRepository repository)
             EditTicketDetailError.DetailNotFound => RepairTicketDetailError.DetailNotFound,
             EditTicketDetailError.InsufficientStock => RepairTicketDetailError.InsufficientStock,
             EditTicketDetailError.SparePartInactive => RepairTicketDetailError.SparePartInactive,
+            EditTicketDetailError.ChangedByUserNotFoundOrInactive => RepairTicketDetailError.ChangedByUserNotFoundOrInactive,
             _ => RepairTicketDetailError.InvalidAmounts
         };
     }
 
-    public async Task<RepairTicketDetailError> DeleteAsync(int ticketId, int detailId)
+    public async Task<RepairTicketDetailError> DeleteAsync(int ticketId, int detailId, int changedByUserId)
     {
-        var error = await repository.DeleteAsync(ticketId, detailId);
+        var error = await repository.DeleteAsync(ticketId, detailId, changedByUserId);
         return error switch
         {
             EditTicketDetailError.None => RepairTicketDetailError.None,
             EditTicketDetailError.RepairTicketNotFound => RepairTicketDetailError.RepairTicketNotFound,
             EditTicketDetailError.RepairTicketNotEditable => RepairTicketDetailError.RepairTicketNotEditable,
             EditTicketDetailError.DetailNotFound => RepairTicketDetailError.DetailNotFound,
+            EditTicketDetailError.ChangedByUserNotFoundOrInactive => RepairTicketDetailError.ChangedByUserNotFoundOrInactive,
             _ => RepairTicketDetailError.InvalidAmounts
         };
     }
 
     private async Task<RepairTicketDetailResult<RepairTicketDetail>> AddAsync(
-        RepairTicketDetail detail, InventoryTransaction? inventoryTransaction)
+        RepairTicketDetail detail, InventoryTransaction? inventoryTransaction, int changedByUserId, string statusNote)
     {
-        var error = await repository.AddAsync(detail, inventoryTransaction);
+        var error = await repository.AddAsync(detail, inventoryTransaction, changedByUserId, statusNote);
         return error == AddTicketDetailError.None
             ? RepairTicketDetailResult<RepairTicketDetail>.Success(detail)
             : Failure(error switch
@@ -153,6 +155,7 @@ public class RepairTicketDetailService(IRepairTicketDetailRepository repository)
                 AddTicketDetailError.SparePartNotFound => RepairTicketDetailError.SparePartNotFound,
                 AddTicketDetailError.SparePartInactive => RepairTicketDetailError.SparePartInactive,
                 AddTicketDetailError.InsufficientStock => RepairTicketDetailError.InsufficientStock,
+                AddTicketDetailError.ChangedByUserNotFoundOrInactive => RepairTicketDetailError.ChangedByUserNotFoundOrInactive,
                 _ => RepairTicketDetailError.RepairTicketNotFound
             });
     }

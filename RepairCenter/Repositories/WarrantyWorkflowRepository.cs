@@ -4,6 +4,7 @@ using RepairCenter.Data;
 using RepairCenter.Entities;
 using RepairCenter.Enums;
 using RepairCenter.Repositories.Interfaces;
+using RepairCenter.Utilities;
 
 namespace RepairCenter.Repositories;
 
@@ -203,7 +204,7 @@ public class WarrantyWorkflowRepository(RepairCenterDbContext db) : IWarrantyWor
             var issue = $"Bảo hành hạng mục: {itemDescription}. Nội dung yêu cầu: {claim.Description}";
             var warrantyTicket = new RepairTicket
             {
-                TicketNumber = $"RC-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid():N}"[..21].ToUpperInvariant(),
+                TicketNumber = RepairTicketNumberGenerator.Generate(),
                 CustomerId = originalTicket.CustomerId,
                 DeviceId = originalTicket.DeviceId,
                 TechnicianId = claim.AssignedTechnician is { IsActive: true, User.IsActive: true } assigned &&

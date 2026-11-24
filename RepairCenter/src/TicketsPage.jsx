@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import StatusBadge from './StatusBadge.jsx';
 
 const b = () => window.repairCenterBridge;
@@ -9,22 +9,39 @@ export default function TicketsPage() {
   const [status, setStatus] = useState('');
   const [receivedFrom, setReceivedFrom] = useState('');
   const [receivedTo, setReceivedTo] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageSize = 50;
   const [selectedId, setSelectedId] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  window.openTicketReact = setSelectedId;
-
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      setRows(await b().api('/api/repair-tickets'));
+      const params = new URLSearchParams({ page, pageSize });
+      if (query.trim()) params.set('search', query.trim());
+      if (status) params.set('status', status);
+      if (receivedFrom) params.set('receivedFrom', `${receivedFrom}T00:00:00Z`);
+      if (receivedTo) {
+        const end = new Date(`${receivedTo}T00:00:00Z`);
+        end.setUTCDate(end.getUTCDate() + 1);
+        params.set('receivedTo', end.toISOString());
+      }
+      const result = await b().api(`/api/repair-tickets?${params}`);
+      const lastPage = Math.max(1, Math.ceil(result.totalCount / pageSize));
+      if (page > lastPage) {
+        setPage(lastPage);
+        return;
+      }
+      setRows(result.items);
+      setTotalCount(result.totalCount);
     } catch (e) {
       setError(e.message || 'Không tải được danh sách phiếu.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, query, receivedFrom, receivedTo, status]);
 
   useEffect(() => {
     refresh();
@@ -35,29 +52,31 @@ export default function TicketsPage() {
     window.addEventListener('repair-tickets-changed', onTicketMutation);
     return () => {
       window.removeEventListener('repair-tickets-changed', onTicketMutation);
-      delete window.openTicketReact;
     };
+  }, [refresh]);
+
+  useEffect(() => {
+    window.openTicketReact = setSelectedId;
+    return () => { delete window.openTicketReact; };
   }, []);
 
-  const filtered = useMemo(() => rows.filter(t => {
-    const state = b().enumKey(t.status);
-    const text = [t.ticketNumber, t.customerName, t.customerPhoneNumber, t.deviceBrand, t.deviceModel, t.issueDescription].join(' ').toLowerCase();
-    const receivedDate = String(t.receivedAt || '').slice(0, 10);
-    return (!status || state === status) && (!query || text.includes(query.toLowerCase())) &&
-      (!receivedFrom || receivedDate >= receivedFrom) && (!receivedTo || receivedDate <= receivedTo);
-  }), [rows, query, status, receivedFrom, receivedTo]);
+  const updateFilter = setter => value => {
+    setter(value);
+    setPage(1);
+  };
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
 
   return (
     <>
       <div className="toolbar">
-        <input className="search" placeholder="Tìm mã phiếu, khách hàng, số điện thoại, thiết bị…" value={query} onChange={e => setQuery(e.target.value)} />
-        <select value={status} onChange={e => setStatus(e.target.value)}>
+        <input className="search" placeholder="Tìm mã phiếu, khách hàng, số điện thoại, thiết bị…" value={query} onChange={e => updateFilter(setQuery)(e.target.value)} />
+        <select value={status} onChange={e => updateFilter(setStatus)(e.target.value)}>
           <option value="">Tất cả trạng thái</option>
           {Object.entries(b().statusLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select>
-        <label className="ticket-date-filter">Tiếp nhận từ<input aria-label="Ngày tiếp nhận từ" type="date" value={receivedFrom} max={receivedTo || undefined} onChange={e => setReceivedFrom(e.target.value)} /></label>
-        <label className="ticket-date-filter">Đến ngày<input aria-label="Ngày tiếp nhận đến" type="date" value={receivedTo} min={receivedFrom || undefined} onChange={e => setReceivedTo(e.target.value)} /></label>
-        {(receivedFrom || receivedTo) && <button className="button" onClick={() => { setReceivedFrom(''); setReceivedTo(''); }}>Xóa ngày lọc</button>}
+        <label className="ticket-date-filter">Tiếp nhận từ<input aria-label="Ngày tiếp nhận từ" type="date" value={receivedFrom} max={receivedTo || undefined} onChange={e => updateFilter(setReceivedFrom)(e.target.value)} /></label>
+        <label className="ticket-date-filter">Đến ngày<input aria-label="Ngày tiếp nhận đến" type="date" value={receivedTo} min={receivedFrom || undefined} onChange={e => updateFilter(setReceivedTo)(e.target.value)} /></label>
+        {(receivedFrom || receivedTo) && <button className="button" onClick={() => { updateFilter(setReceivedFrom)(''); updateFilter(setReceivedTo)(''); }}>Xóa ngày lọc</button>}
       </div>
       {error && (
         <div className="panel">
@@ -71,7 +90,7 @@ export default function TicketsPage() {
       ) : !error && (
         <div className="table-card">
           <div className="table-head">
-            <h2>Phiếu · {filtered.length}</h2>
+            <h2>Phiếu · {totalCount}</h2>
             <div className="table-tools">
               <button className="button small" onClick={refresh}>Làm mới</button>
             </div>
@@ -84,7 +103,7 @@ export default function TicketsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length ? filtered.map(t => (
+                {rows.length ? rows.map(t => (
                   <tr key={t.id}>
                     <td><button className="icon-action ticket-number" onClick={() => setSelectedId(t.id)}>{t.ticketNumber}</button></td>
                     <td>{t.customerName}<span className="secondary">{`${t.deviceBrand || ''} ${t.deviceModel || ''} · ${t.deviceType || ''}`}</span></td>
@@ -99,6 +118,13 @@ export default function TicketsPage() {
                 )}
               </tbody>
             </table>
+          </div>
+          <div className="table-head">
+            <span className="muted">Trang {page} / {pageCount}</span>
+            <div className="table-tools">
+              <button className="button small" disabled={page <= 1} onClick={() => setPage(current => current - 1)}>Trước</button>
+              <button className="button small" disabled={page >= pageCount} onClick={() => setPage(current => current + 1)}>Sau</button>
+            </div>
           </div>
         </div>
       )}
@@ -194,6 +220,11 @@ function TicketDetail({ id, onClose, onChanged }) {
     }
   };
 
+  const openInvoice = () => {
+    onClose();
+    window.navigate('billing').then(() => window.openInvoiceReact?.(id));
+  };
+
   const quotePanel = quotes === null ? (
     <p className="field-note">Chức năng báo giá chưa sẵn sàng. Cần cập nhật cơ sở dữ liệu.</p>
   ) : quotes.length ? (
@@ -228,6 +259,11 @@ function TicketDetail({ id, onClose, onChanged }) {
           <h2>Phiếu {t.ticketNumber}</h2>
           <div className="quick-actions">
             <button className="button small" onClick={() => b().printTicket(id)}>In phiếu</button>
+            {['Completed', 'Delivered'].includes(status) && b().can('Admin', 'Receptionist') && (
+              <button className="button small primary" onClick={openInvoice}>
+                Hóa đơn / thanh toán
+              </button>
+            )}
             <button className="close" onClick={onClose}>×</button>
           </div>
         </div>

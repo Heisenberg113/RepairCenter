@@ -7,11 +7,11 @@ public interface IRepairTicketDetailService
 {
     Task<RepairTicketDetailResult<List<RepairTicketDetail>>> GetByTicketAsync(int ticketId);
     Task<RepairTicketDetailResult<RepairTicketDetail>> AddRepairServiceAsync(
-        int ticketId, int serviceId, decimal quantity, decimal discountPercent,
+        int ticketId, int serviceId, decimal quantity, decimal discountPercent, int changedByUserId,
         int? warrantyDuration = null, WarrantyDurationUnit? warrantyDurationUnit = null, string? warrantyTerms = null);
     Task<RepairTicketDetailResult<RepairTicketDetail>> AddSparePartAsync(
-        int ticketId, int sparePartId, decimal quantity, decimal discountPercent,
+        int ticketId, int sparePartId, decimal quantity, decimal discountPercent, int changedByUserId,
         int? warrantyDuration = null, WarrantyDurationUnit? warrantyDurationUnit = null, string? warrantyTerms = null);
-    Task<RepairTicketDetailError> UpdateAsync(int ticketId, int detailId, decimal quantity, decimal discountPercent);
-    Task<RepairTicketDetailError> DeleteAsync(int ticketId, int detailId);
+    Task<RepairTicketDetailError> UpdateAsync(int ticketId, int detailId, decimal quantity, decimal discountPercent, int changedByUserId);
+    Task<RepairTicketDetailError> DeleteAsync(int ticketId, int detailId, int changedByUserId);
 }

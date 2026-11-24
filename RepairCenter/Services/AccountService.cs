@@ -64,38 +64,25 @@ public class AccountService(IAccountRepository repository, IPasswordHasher<User>
 
     public async Task<AccountResult<User>> SetRolesAsync(int id, IEnumerable<string> roleNames)
     {
-        var user = await repository.GetByIdAsync(id);
-        if (user is null) return AccountResult<User>.Failure(AccountError.AccountNotFound);
         var names = roleNames.ToArray();
         var roles = await repository.GetRolesAsync(names);
         if (names.Length != 1 || roles.Count != 1 || roles.Count != names.Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count())
             return AccountResult<User>.Failure(AccountError.InvalidRoles);
-        if (roles.Any(x => x.Name == "Technician") && !await repository.HasActiveTechnicianProfileAsync(user.Id))
+        if (roles.Any(x => x.Name == "Technician") && !await repository.HasActiveTechnicianProfileAsync(id))
             return AccountResult<User>.Failure(AccountError.TechnicianProfileRequired);
-        if (user.IsActive && user.UserRoles.Any(x => x.Role.IsActive && x.Role.Name == "Admin") &&
-            !roles.Any(x => x.Name == "Admin") && await repository.CountActiveAdminsAsync() <= 1)
-            return AccountResult<User>.Failure(AccountError.LastActiveAdmin);
-        user.UserRoles.Clear();
-        foreach (var role in roles) user.UserRoles.Add(new UserRole { UserId = id, RoleId = role.Id, User = user, Role = role });
-        user.TokenVersion++;
-        await repository.SaveAsync();
+        var result = await repository.UpdateRolesSafelyAsync(id, roles);
+        if (result.User is null) return AccountResult<User>.Failure(AccountError.AccountNotFound);
+        if (result.LastActiveAdmin) return AccountResult<User>.Failure(AccountError.LastActiveAdmin);
+        var user = result.User;
         return AccountResult<User>.Success(user);
     }
 
     public async Task<AccountResult<User>> SetActiveAsync(int id, bool active)
     {
-        var user = await repository.GetByIdAsync(id);
-        if (user is null) return AccountResult<User>.Failure(AccountError.AccountNotFound);
-        if (!active && user.IsActive && user.UserRoles.Any(x => x.Role.IsActive && x.Role.Name == "Admin") &&
-            await repository.CountActiveAdminsAsync() <= 1)
-            return AccountResult<User>.Failure(AccountError.LastActiveAdmin);
-        if (user.IsActive != active)
-        {
-            user.IsActive = active;
-            user.TokenVersion++;
-        }
-        await repository.SaveAsync();
-        return AccountResult<User>.Success(user);
+        var result = await repository.SetActiveSafelyAsync(id, active);
+        if (result.User is null) return AccountResult<User>.Failure(AccountError.AccountNotFound);
+        if (result.LastActiveAdmin) return AccountResult<User>.Failure(AccountError.LastActiveAdmin);
+        return AccountResult<User>.Success(result.User);
     }
 
     public async Task<AccountResult<User>> RevokeTokensAsync(int id)

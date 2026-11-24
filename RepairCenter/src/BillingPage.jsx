@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 const b=()=>window.repairCenterBridge;
 const labels={Pending:'Chưa thanh toán',PartiallyPaid:'Thanh toán một phần',Paid:'Đã thanh toán',Refunded:'Đã hoàn tiền',Overdue:'Quá hạn'};
 const paymentEnums={1:'Pending',2:'PartiallyPaid',3:'Paid',4:'Refunded',5:'Overdue'};
@@ -33,13 +33,13 @@ function InvoiceDetail({ticketId,onChanged}){
 }
 
 export default function BillingPage(){
- const [rows,setRows]=useState([]),[query,setQuery]=useState(''),[loading,setLoading]=useState(true),[error,setError]=useState(''),[lookup,setLookup]=useState(''),[selected,setSelected]=useState(null);
- const refresh=async()=>{setLoading(true);setError('');try{const ts=await b().api('/api/repair-tickets');const done=ts.filter(t=>['Completed','Delivered'].includes(b().enumKey(t.status)));const data=await Promise.all(done.map(async t=>{try{return {ticket:t,invoice:await b().api(`/api/invoices/by-ticket/${t.id}`)}}catch(e){if(e.status===404)return {ticket:t,invoice:null};throw e}}));setRows(data)}catch(e){setError(e.message||'Không tải được danh sách hóa đơn.')}finally{setLoading(false)}};
- useEffect(()=>{window.openInvoiceReact=id=>setSelected(id);refresh();return()=>{delete window.openInvoiceReact}},[]);
+ const [rows,setRows]=useState([]),[query,setQuery]=useState(''),[loading,setLoading]=useState(true),[error,setError]=useState(''),[selected,setSelected]=useState(null);
+ const refresh=async()=>{setLoading(true);setError('');try{const loadStatus=async status=>{let page=1,items=[];while(true){const result=await b().api(`/api/repair-tickets?status=${status}&page=${page}&pageSize=100`);items=items.concat(result.items);if(items.length>=result.totalCount)break;page++}return items};const done=(await Promise.all(['Completed','Delivered'].map(loadStatus))).flat();const data=await Promise.all(done.map(async t=>{try{return {ticket:t,invoice:await b().api(`/api/invoices/by-ticket/${t.id}`)}}catch(e){if(e.status===404)return {ticket:t,invoice:null};throw e}}));setRows(data)}catch(e){setError(e.message||'Không tải được danh sách hóa đơn.')}finally{setLoading(false)}};
+ useLayoutEffect(()=>{window.openInvoiceReact=id=>setSelected(id);return()=>{delete window.openInvoiceReact}},[]);
+ useEffect(()=>{refresh()},[]);
  const filtered=useMemo(()=>rows.filter(({ticket:t})=>!query||[t.ticketNumber,t.customerName,t.deviceBrand,t.deviceModel].join(' ').toLowerCase().includes(query.toLowerCase())),[rows,query]);
- const submit=async e=>{e.preventDefault();const code=lookup.trim();if(!code)return;try{const t=await b().api(`/api/repair-tickets/by-number/${encodeURIComponent(code)}`);setSelected(t.id)}catch(e){setError(e.message||'Không tìm thấy phiếu.')}};
  return <><div className="panel"><div className="panel-head"><div><h2>Hóa đơn cho phiếu đã hoàn tất</h2><p>{rows.length} phiếu ở trạng thái hoàn tất hoặc đã giao. Cần có ít nhất một dịch vụ/phụ tùng để lập hóa đơn.</p></div><button className="button small" onClick={refresh}>Làm mới</button></div>
-  <form className="toolbar" onSubmit={submit}><input className="search" value={lookup} onChange={e=>setLookup(e.target.value)} maxLength="50" placeholder="Tra cứu theo mã phiếu, ví dụ RC-20261025-D85F09064" required/><button className="button primary">Tra cứu</button></form><div className="toolbar"><input className="search" placeholder="Lọc phiếu hoàn tất…" value={query} onChange={e=>setQuery(e.target.value)}/></div>
+  <div className="toolbar"><input className="search" placeholder="Tìm theo mã phiếu, khách hàng hoặc thiết bị…" value={query} onChange={e=>setQuery(e.target.value)}/></div>
   {error&&<div className="field-note">{error}</div>}{loading?<div className="empty-state">Đang tải hóa đơn…</div>:<div className="table-card"><div className="table-head"><h2>Phiếu và trạng thái hóa đơn</h2></div><div className="table-scroll"><table><thead><tr><th>Mã phiếu</th><th>Khách hàng</th><th>Thiết bị</th><th>Hóa đơn / thanh toán</th><th/></tr></thead><tbody>{filtered.map(({ticket:t,invoice:i})=><tr key={t.id}><td className="ticket-number">{t.ticketNumber}</td><td>{t.customerName}</td><td>{t.deviceBrand} {t.deviceModel}</td><td>{i?<span className={`badge ${paymentStatus(i)==='Paid'?'green':paymentStatus(i)==='Overdue'?'red':'amber'}`}>{labels[paymentStatus(i)]||paymentStatus(i)}</span>:<span className="badge amber">Chưa lập hóa đơn</span>}</td><td><button className="button small" onClick={()=>setSelected(t.id)}>{i?'Mở hóa đơn':'Tạo hóa đơn'}</button></td></tr>)}</tbody></table></div></div>}
  </div>{selected&&<InvoiceDetail key={selected} ticketId={selected} onChanged={refresh}/>}</>;
 }

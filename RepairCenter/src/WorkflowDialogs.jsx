@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 const b=()=>window.repairCenterBridge;
+const fetchAllTickets=async query=>{let page=1,items=[];while(true){const result=await b().api(`/api/repair-tickets?${query}&page=${page}&pageSize=100`);items=items.concat(result.items);if(items.length>=result.totalCount)return items;page++}};
 const esc=s=>String(s??'');
 const Field=({label,name,children,className=''})=><label className={className}>{label}{children||<input name={name}/>}</label>;
 const Text=({label,name,defaultValue='',...props})=><Field label={label} name={name}><input name={name} defaultValue={defaultValue??''} {...props}/></Field>;
@@ -11,7 +12,7 @@ const Area=({label,name,defaultValue='',...props})=><Field label={label} name={n
 export default function WorkflowDialogs(){
  const [dialog,setDialog]=useState(null),[data,setData]=useState({}),[error,setError]=useState(''),[busy,setBusy]=useState(false),[customerChoice,setCustomerChoice]=useState('new'),[deviceChoice,setDeviceChoice]=useState('new');
  const close=()=>{setDialog(null);setData({});setError('');setBusy(false)};
- useEffect(()=>{window.openWorkflowDialog=(type,payload={})=>{setData({});setError('');setBusy(false);setDialog({type,payload})};window.closeWorkflowDialog=close;return()=>{delete window.openWorkflowDialog;delete window.closeWorkflowDialog}},[]);
+ useEffect(()=>{window.openWorkflowDialog=(type,payload={})=>{setData({});setError('');setBusy(false);if(type==='intake'){setCustomerChoice('new');setDeviceChoice('new')}setDialog({type,payload})};window.closeWorkflowDialog=close;return()=>{delete window.openWorkflowDialog;delete window.closeWorkflowDialog}},[]);
  useEffect(()=>{if(!dialog)return;let active=true;const load=async()=>{setError('');try{const p=dialog.payload||{},d={};switch(dialog.type){
   case 'intake': [d.customers,d.types]=await Promise.all([b().api('/api/customers'),b().api('/api/device-types')]);break;
   case 'customer': if(p.id)d.item=p.item||await b().api(`/api/customers/${p.id}`);break;
@@ -30,14 +31,14 @@ export default function WorkflowDialogs(){
   case 'editDetail': break;
   case 'quoteResponse': break;
   case 'catalog': d.types=await b().api('/api/device-types');d.item=p.targetId?(p.itemType==='RepairService'?(b().data.repairServices||[]).find(x=>x.id===p.targetId):(b().data.parts||[]).find(x=>x.id===p.targetId))||{}:{};break;
-  case 'customerTickets': d.rows=await b().api(`/api/repair-tickets?customerId=${p.id}`);d.title=`Phiếu sửa chữa · ${p.name||'Khách hàng'}`;break;
-  case 'technicianTickets': {const all=await b().api('/api/repair-tickets');d.rows=all.filter(t=>t.technicianId===p.id&&!['Delivered','Cancelled'].includes(b().enumKey(t.status)));d.title=`Phiếu đang phụ trách · ${p.name||'Kỹ thuật viên'}`;break;}
+  case 'customerTickets': d.rows=await fetchAllTickets(`customerId=${encodeURIComponent(p.id)}`);d.title=`Phiếu sửa chữa · ${p.name||'Khách hàng'}`;break;
+  case 'technicianTickets': d.rows=(await fetchAllTickets(`technicianId=${encodeURIComponent(p.id)}`)).filter(t=>!['Delivered','Cancelled'].includes(b().enumKey(t.status)));d.title=`Phiếu đang phụ trách · ${p.name||'Kỹ thuật viên'}`;break;
   case 'partTransactions': d.rows=await b().api(`/api/spare-parts/${p.id}/transactions`);d.title='Lịch sử giao dịch kho';break;
   case 'resetPassword': d.item=(b().data.users||[]).find(x=>x.id===p.id);break;
   default: break;
  }if(active){setData(d);if(dialog.type==='intake')setCustomerChoice('new');if(dialog.type==='addService')setServiceId(d.services?.[0]?.id||'');if(dialog.type==='addPart')setPartId(d.parts?.[0]?.id||'')}}catch(e){if(active)setError(e.message||'Không tải được thông tin cần thiết.')}};load();return()=>{active=false}},[dialog]);
  const [serviceId,setServiceId]=useState(''),[partId,setPartId]=useState('');
- useEffect(()=>{if(dialog?.type==='intake'&&customerChoice!=='new'){b().api(`/api/devices?customerId=${customerChoice}`).then(rows=>setData(v=>({...v,devices:rows}))).catch(e=>setError(e.message))}else if(dialog?.type==='intake')setData(v=>({...v,devices:[]}));},[customerChoice,dialog?.type]);
+ useEffect(()=>{if(dialog?.type==='intake'&&customerChoice!=='new'){setDeviceChoice('new');b().api(`/api/devices?customerId=${customerChoice}`).then(rows=>setData(v=>({...v,devices:rows}))).catch(e=>setError(e.message))}else if(dialog?.type==='intake')setData(v=>({...v,devices:[]}));},[customerChoice,dialog?.type]);
  const title=dialog?({intake:'Tiếp nhận sửa chữa',customer:dialog.payload?.id?'Sửa khách hàng':'Thêm khách hàng',device:dialog.payload?.id?'Cập nhật thiết bị':'Ghi nhận thiết bị',deviceType:dialog.payload?.id?'Sửa loại thiết bị':'Thêm loại thiết bị',technician:dialog.payload?.id?'Cập nhật kỹ thuật viên':'Thêm kỹ thuật viên',service:dialog.payload?.id?'Sửa dịch vụ':'Thêm dịch vụ',part:dialog.payload?.id?'Cập nhật phụ tùng':'Thêm phụ tùng',stock:'Nhập / xuất kho',account:'Tạo tài khoản',roles:`Quyền tài khoản ${data.item?.userName||''}`,assign:`Phân công · ${data.ticket?.deviceType||'đúng chuyên môn'}`,status:'Cập nhật trạng thái',addService:'Thêm dịch vụ',addPart:'Thêm phụ tùng vào phiếu',editDetail:'Sửa hạng mục',quoteResponse:'Ghi nhận phản hồi khách',catalog:dialog.payload?.action==='Create'?'Yêu cầu thêm danh mục':`Yêu cầu sửa ${dialog.payload?.itemType==='SparePart'?'phụ tùng':'dịch vụ'}`,catalogResolve:dialog.payload?.approve?'Duyệt yêu cầu danh mục':'Từ chối yêu cầu danh mục',customerTickets:data.title,technicianTickets:data.title,partTransactions:data.title,resetPassword:'Mật khẩu tạm mới'}[dialog.type]||'Thao tác'):'Thao tác';
  if(!dialog)return null;
  const p=dialog.payload||{},item=data.item||{},types=(data.types||[]).map(x=>({value:x.id,label:x.name}));
@@ -62,7 +63,7 @@ export default function WorkflowDialogs(){
    case 'quoteResponse': await b().api(`/api/repair-tickets/${p.ticketId}/quotes/${p.versionId}/response`,{method:'POST',body:{response:val('response'),channel:val('channel'),note:nil('note')}});break;
    case 'catalog': {const body={itemType:p.itemType,action:p.action,targetId:p.targetId||null,deviceTypeId:num('deviceTypeId'),name:val('name'),description:nil('description'),warrantyDuration:num('warrantyDuration'),warrantyDurationUnit:num('warrantyDurationUnit'),warrantyTerms:nil('warrantyTerms')};if(p.itemType==='SparePart')Object.assign(body,{partNumber:val('partNumber'),unitCost:num('unitCost'),sellingPrice:num('sellingPrice'),reorderLevel:num('reorderLevel')});else body.unitPrice=num('unitPrice');await b().api('/api/catalog-change-requests',{method:'POST',body});break;}
    case 'catalogResolve': await b().api(`/api/catalog-change-requests/${p.id}/${p.approve?'approve':'reject'}`,{method:'POST',body:{note:val('note')||''}});break;
-   case 'intake': {let customerId=num('customerId');if(val('customerId')==='new'){const c=await b().api('/api/customers',{method:'POST',body:{name:val('customerName'),phoneNumber:nil('customerPhone'),email:nil('customerEmail'),address:nil('customerAddress')}});customerId=c.id}let deviceId=num('deviceId');if(val('deviceId')==='new'){const d=await b().api('/api/devices',{method:'POST',body:{customerId,deviceTypeId:num('deviceTypeId'),brand:val('brand'),model:val('model'),serialNumber:nil('serialNumber'),color:nil('color'),description:nil('deviceDescription')}});deviceId=d.id}const t=await b().api('/api/repair-tickets',{method:'POST',body:{customerId,deviceId,issueDescription:val('issueDescription'),customerNotes:nil('customerNotes')}});setBusy(false);close();window.repairCenterBridge?.toast?.(`Đã tạo phiếu ${t.ticketNumber}`);window.navigate('tickets');return;}
+   case 'intake': {const body={issueDescription:val('issueDescription'),customerNotes:nil('customerNotes')};if(val('customerId')==='new')body.newCustomer={name:val('customerName'),phoneNumber:nil('customerPhone'),email:nil('customerEmail'),address:nil('customerAddress')};else body.customerId=num('customerId');if(val('deviceId')==='new')body.newDevice={deviceTypeId:num('deviceTypeId'),brand:val('brand'),model:val('model'),serialNumber:nil('serialNumber'),color:nil('color'),description:nil('deviceDescription')};else body.deviceId=num('deviceId');const t=await b().api('/api/repair-tickets/intake',{method:'POST',body});setBusy(false);close();window.repairCenterBridge?.toast?.(`Đã tạo phiếu ${t.ticketNumber}`);window.navigate('tickets');return;}
    case 'resetPassword': {const r=await b().api(`/api/accounts/${p.id}/reset-password`,{method:'POST'});setData(v=>({...v,password:r.temporaryPassword}));setBusy(false);return;}
    default: throw new Error('Thao tác này chưa được kết nối.');
   }

@@ -2,13 +2,18 @@ using RepairCenter.Entities;
 using RepairCenter.Enums;
 using RepairCenter.Repositories.Interfaces;
 using RepairCenter.Services.Interfaces;
+using RepairCenter.Utilities;
 
 namespace RepairCenter.Services;
 
 public class RepairTicketService(IRepairTicketRepository repository) : IRepairTicketService
 {
-    public Task<List<RepairTicket>> GetAllAsync(int? customerId = null, int? deviceId = null) =>
-        repository.GetAllAsync(customerId, deviceId);
+    public Task<PagedResult<RepairTicket>> GetAllAsync(
+        int page, int pageSize, int? customerId, int? deviceId, int? technicianId,
+        int? technicianUserId, RepairStatus? status,
+        DateTime? receivedFrom, DateTime? receivedTo, string? search) =>
+        repository.GetAllAsync(page, pageSize, customerId, deviceId, technicianId,
+            technicianUserId, status, receivedFrom, receivedTo, search);
 
     public Task<RepairTicket?> GetByIdAsync(int id) => repository.GetByIdAsync(id);
     public Task<RepairTicket?> GetByTicketNumberAsync(string ticketNumber) => repository.GetByTicketNumberAsync(ticketNumber);
@@ -113,7 +118,7 @@ public class RepairTicketService(IRepairTicketRepository repository) : IRepairTi
 
         ticket.Device = device;
         ticket.Customer = (await repository.GetCustomerAsync(ticket.CustomerId))!;
-        ticket.TicketNumber = $"RC-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid():N}"[..21].ToUpperInvariant();
+        ticket.TicketNumber = RepairTicketNumberGenerator.Generate();
         ticket.Status = RepairStatus.Received;
         ticket.ReceivedAt = DateTime.UtcNow;
         ticket.IssueDescription = ticket.IssueDescription.Trim();

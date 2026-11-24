@@ -1,11 +1,15 @@
 using RepairCenter.Entities;
 using RepairCenter.Enums;
+using RepairCenter.Repositories.Interfaces;
 
 namespace RepairCenter.Services.Interfaces;
 
 public interface IRepairTicketService
 {
-    Task<List<RepairTicket>> GetAllAsync(int? customerId = null, int? deviceId = null);
+    Task<PagedResult<RepairTicket>> GetAllAsync(
+        int page, int pageSize, int? customerId, int? deviceId, int? technicianId,
+        int? technicianUserId, RepairStatus? status,
+        DateTime? receivedFrom, DateTime? receivedTo, string? search);
     Task<RepairTicket?> GetByIdAsync(int id);
     Task<RepairTicket?> GetByTicketNumberAsync(string ticketNumber);
     Task<List<RepairTicketStatusHistory>> GetStatusHistoryAsync(int repairTicketId);

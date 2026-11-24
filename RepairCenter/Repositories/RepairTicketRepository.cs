@@ -7,7 +7,10 @@ namespace RepairCenter.Repositories;
 
 public class RepairTicketRepository(RepairCenterDbContext context) : IRepairTicketRepository
 {
-    public Task<List<RepairTicket>> GetAllAsync(int? customerId = null, int? deviceId = null)
+    public async Task<PagedResult<RepairTicket>> GetAllAsync(
+        int page, int pageSize, int? customerId, int? deviceId, int? technicianId,
+        int? technicianUserId, RepairCenter.Enums.RepairStatus? status,
+        DateTime? receivedFrom, DateTime? receivedTo, string? search)
     {
         var query = context.RepairTickets
             .AsNoTracking()
@@ -23,7 +26,43 @@ public class RepairTicketRepository(RepairCenterDbContext context) : IRepairTick
         if (deviceId.HasValue)
             query = query.Where(ticket => ticket.DeviceId == deviceId.Value);
 
-        return query.OrderByDescending(ticket => ticket.ReceivedAt).ToListAsync();
+        if (technicianId.HasValue)
+            query = query.Where(ticket => ticket.TechnicianId == technicianId.Value);
+
+        if (technicianUserId.HasValue)
+            query = query.Where(ticket => ticket.Technician != null && ticket.Technician.UserId == technicianUserId.Value);
+
+        if (status.HasValue)
+            query = query.Where(ticket => ticket.Status == status.Value);
+
+        if (receivedFrom.HasValue)
+            query = query.Where(ticket => ticket.ReceivedAt >= receivedFrom.Value);
+
+        if (receivedTo.HasValue)
+            query = query.Where(ticket => ticket.ReceivedAt < receivedTo.Value);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(ticket =>
+                ticket.TicketNumber.Contains(term) ||
+                ticket.Customer.Name.Contains(term) ||
+                (ticket.Customer.PhoneNumber != null && ticket.Customer.PhoneNumber.Contains(term)) ||
+                ticket.Device.Brand.Contains(term) ||
+                ticket.Device.Model.Contains(term) ||
+                ticket.IssueDescription.Contains(term));
+        }
+
+        var totalCount = await query.CountAsync();
+        var activeCount = await query.CountAsync(ticket =>
+            ticket.Status != RepairCenter.Enums.RepairStatus.Delivered &&
+            ticket.Status != RepairCenter.Enums.RepairStatus.Cancelled);
+        var items = await query.OrderByDescending(ticket => ticket.ReceivedAt)
+            .ThenByDescending(ticket => ticket.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+        return new PagedResult<RepairTicket>(items, page, pageSize, totalCount, activeCount);
     }
 
     public Task<RepairTicket?> GetByIdAsync(int id) => context.RepairTickets

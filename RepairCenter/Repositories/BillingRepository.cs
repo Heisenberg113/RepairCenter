@@ -120,8 +120,7 @@ public class BillingRepository(RepairCenterDbContext context) : IBillingReposito
     {
         return await context.Invoices
             .Where(invoice => invoice.DueAt.HasValue && invoice.DueAt <= now && invoice.TotalAmount > invoice.AmountPaid &&
-                (invoice.PaymentStatus == PaymentStatus.Pending || invoice.PaymentStatus == PaymentStatus.PartiallyPaid ||
-                 invoice.PaymentStatus == PaymentStatus.Refunded))
+                (invoice.PaymentStatus == PaymentStatus.Pending || invoice.PaymentStatus == PaymentStatus.PartiallyPaid))
             .ExecuteUpdateAsync(update => update.SetProperty(invoice => invoice.PaymentStatus, PaymentStatus.Overdue));
     }
 

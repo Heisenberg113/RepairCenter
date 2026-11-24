@@ -5,28 +5,51 @@ using RepairCenter.DTOs.RepairTickets;
 using RepairCenter.Entities;
 using RepairCenter.Enums;
 using RepairCenter.Services.Interfaces;
-using RepairCenter.Data;
+using RepairCenter.Repositories.Interfaces;
 
 namespace RepairCenter.Controllers;
 
 [ApiController]
 [Route("api/repair-tickets")]
 [Authorize(Roles = "Admin,Receptionist,Technician")]
-public class RepairTicketsController(IRepairTicketService service, IRepairTicketDetailService detailService, RepairCenterDbContext db) : ControllerBase
+public class RepairTicketsController(
+    IRepairTicketService service,
+    IRepairTicketDetailService detailService,
+    IRepairIntakeService intakeService,
+    IRepairQuoteService quoteService) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<RepairTicketResponse>>> GetAll(
+    public async Task<ActionResult<PagedRepairTicketResponse>> GetAll(
         [FromQuery] int? customerId,
-        [FromQuery] int? deviceId)
+        [FromQuery] int? deviceId,
+        [FromQuery] int? technicianId,
+        [FromQuery] RepairStatus? status,
+        [FromQuery] DateTime? receivedFrom,
+        [FromQuery] DateTime? receivedTo,
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50)
     {
-        var tickets = await service.GetAllAsync(customerId, deviceId);
+        if (page < 1 || pageSize is < 1 or > 100 || receivedFrom > receivedTo)
+            return BadRequest(new ProblemDetails { Title = "Tham số phân trang hoặc bộ lọc không hợp lệ." });
+
+        int? technicianUserId = null;
         if (User.IsInRole("Technician") && !User.IsInRole("Admin"))
         {
             if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
-                return Ok(Array.Empty<RepairTicketResponse>());
-            tickets = tickets.Where(ticket => ticket.Technician?.UserId == userId).ToList();
+                return Unauthorized();
+            technicianUserId = userId;
         }
-        return Ok(tickets.Select(ToResponse));
+        var result = await service.GetAllAsync(page, pageSize, customerId, deviceId, technicianId,
+            technicianUserId, status, receivedFrom, receivedTo, search);
+        return Ok(new PagedRepairTicketResponse
+        {
+            Items = result.Items.Select(ToResponse),
+            Page = result.Page,
+            PageSize = result.PageSize,
+            TotalCount = result.TotalCount,
+            ActiveCount = result.ActiveCount
+        });
     }
 
     [HttpGet("{id:int}")]
@@ -83,7 +106,7 @@ public class RepairTicketsController(IRepairTicketService service, IRepairTicket
         if (!CanChangeStatus(ticket.Status, nextStatus))
             return Forbid();
         if (nextStatus == RepairStatus.InProgress &&
-            !await RepairQuotesController.CurrentQuoteAcceptedAsync(db, id))
+            !await quoteService.CurrentQuoteAcceptedAsync(id))
             return Conflict(new ProblemDetails
             {
                 Title = "Báo giá chưa được khách đồng ý",
@@ -136,22 +159,22 @@ public class RepairTicketsController(IRepairTicketService service, IRepairTicket
     [HttpPut("{id:int}/details/{detailId:int}")]
     public async Task<IActionResult> UpdateDetail(int id, int detailId, UpdateRepairTicketDetailRequest request)
     {
+        if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var changedByUserId))
+            return Unauthorized();
         var ticket = await service.GetByIdAsync(id);
         if (ticket is null || !CanAccess(ticket)) return NotFound();
-        var error = await detailService.UpdateAsync(id, detailId, request.Quantity, request.DiscountPercent);
-        if (error == RepairTicketDetailError.None && !await ReturnToApprovalIfNeeded(ticket, "Hạng mục thay đổi khi đang sửa; chờ khách duyệt lại báo giá."))
-            return Conflict(new ProblemDetails { Title = "Không thể chuyển phiếu về chờ duyệt." });
+        var error = await detailService.UpdateAsync(id, detailId, request.Quantity, request.DiscountPercent, changedByUserId);
         return error == RepairTicketDetailError.None ? NoContent() : DetailError(error);
     }
 
     [HttpDelete("{id:int}/details/{detailId:int}")]
     public async Task<IActionResult> DeleteDetail(int id, int detailId)
     {
+        if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var changedByUserId))
+            return Unauthorized();
         var ticket = await service.GetByIdAsync(id);
         if (ticket is null || !CanAccess(ticket)) return NotFound();
-        var error = await detailService.DeleteAsync(id, detailId);
-        if (error == RepairTicketDetailError.None && !await ReturnToApprovalIfNeeded(ticket, "Hạng mục bị xóa khi đang sửa; chờ khách duyệt lại báo giá."))
-            return Conflict(new ProblemDetails { Title = "Không thể chuyển phiếu về chờ duyệt." });
+        var error = await detailService.DeleteAsync(id, detailId, changedByUserId);
         return error == RepairTicketDetailError.None ? NoContent() : DetailError(error);
     }
 
@@ -159,16 +182,15 @@ public class RepairTicketsController(IRepairTicketService service, IRepairTicket
     public async Task<ActionResult<RepairTicketDetailResponse>> AddRepairService(
         int id, AddRepairServiceDetailRequest request)
     {
+        if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var changedByUserId))
+            return Unauthorized();
         var ticket = await service.GetByIdAsync(id);
         if (ticket is null || !CanAccess(ticket)) return NotFound();
         var result = await detailService.AddRepairServiceAsync(
-            id, request.RepairServiceId, request.Quantity, request.DiscountPercent,
+            id, request.RepairServiceId, request.Quantity, request.DiscountPercent, changedByUserId,
             request.WarrantyDuration, request.WarrantyDurationUnit, request.WarrantyTerms);
         if (result.Error != RepairTicketDetailError.None)
             return DetailError(result.Error);
-
-        if (!await ReturnToApprovalIfNeeded(ticket, "Phát sinh dịch vụ khi đang sửa; chờ khách duyệt lại báo giá."))
-            return Conflict(new ProblemDetails { Title = "Không thể chuyển phiếu về chờ duyệt." });
 
         return Ok(ToDetailResponse(result.Value!));
     }
@@ -177,16 +199,15 @@ public class RepairTicketsController(IRepairTicketService service, IRepairTicket
     public async Task<ActionResult<RepairTicketDetailResponse>> AddSparePart(
         int id, AddSparePartDetailRequest request)
     {
+        if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var changedByUserId))
+            return Unauthorized();
         var ticket = await service.GetByIdAsync(id);
         if (ticket is null || !CanAccess(ticket)) return NotFound();
         var result = await detailService.AddSparePartAsync(
-            id, request.SparePartId, request.Quantity, request.DiscountPercent,
+            id, request.SparePartId, request.Quantity, request.DiscountPercent, changedByUserId,
             request.WarrantyDuration, request.WarrantyDurationUnit, request.WarrantyTerms);
         if (result.Error != RepairTicketDetailError.None)
             return DetailError(result.Error);
-
-        if (!await ReturnToApprovalIfNeeded(ticket, "Phát sinh phụ tùng khi đang sửa; chờ khách duyệt lại báo giá."))
-            return Conflict(new ProblemDetails { Title = "Không thể chuyển phiếu về chờ duyệt." });
 
         return Ok(ToDetailResponse(result.Value!));
     }
@@ -225,6 +246,23 @@ public class RepairTicketsController(IRepairTicketService service, IRepairTicket
 
         var created = result.Value!;
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, ToResponse(created));
+    }
+
+    [HttpPost("intake")]
+    [Authorize(Roles = "Admin,Receptionist")]
+    public async Task<ActionResult<RepairTicketResponse>> CreateIntake(CreateRepairIntakeRequest request)
+    {
+        var (ticket, error) = await intakeService.CreateAsync(request);
+        if (error == RepairIntakeError.CustomerNotFound)
+            return NotFound(new ProblemDetails { Title = "Không tìm thấy khách hàng." });
+        if (error == RepairIntakeError.DeviceNotFoundForCustomer)
+            return NotFound(new ProblemDetails { Title = "Thiết bị không tồn tại hoặc không thuộc khách hàng đã chọn." });
+        if (error == RepairIntakeError.DeviceTypeNotFound)
+            return NotFound(new ProblemDetails { Title = "Không tìm thấy loại thiết bị." });
+        if (ticket is null)
+            return Problem(statusCode: StatusCodes.Status500InternalServerError);
+
+        return CreatedAtAction(nameof(GetById), new { id = ticket.Id }, ToResponse(ticket));
     }
 
     private ActionResult<RepairTicketResponse> ToError(RepairTicketOperationError error) => error switch
@@ -277,10 +315,11 @@ public class RepairTicketsController(IRepairTicketService service, IRepairTicket
         RepairTicketDetailError.RepairTicketClosed => Conflict(new ProblemDetails { Title = "Phiếu đã đóng, không thể thêm dịch vụ hoặc phụ tùng." }),
         RepairTicketDetailError.InsufficientStock => Conflict(new ProblemDetails { Title = "Tồn kho không đủ để xuất phụ tùng." }),
         RepairTicketDetailError.DiscountExceedsSubtotal => BadRequest(new ProblemDetails { Title = "Số lượng hoặc chiết khấu không hợp lệ." }),
-        RepairTicketDetailError.RepairTicketNotEditable => Conflict(new ProblemDetails { Title = "Chỉ được sửa hoặc xóa hạng mục khi phiếu đang kiểm tra hoặc chờ khách duyệt." }),
+        RepairTicketDetailError.RepairTicketNotEditable => Conflict(new ProblemDetails { Title = "Chỉ được sửa hoặc xóa hạng mục khi phiếu đang kiểm tra, chờ khách duyệt hoặc đang sửa chữa." }),
         RepairTicketDetailError.DetailNotFound => NotFound(new ProblemDetails { Title = "Không tìm thấy hạng mục trên phiếu." }),
         RepairTicketDetailError.InvalidAmounts => BadRequest(new ProblemDetails { Title = "Số lượng hoặc chiết khấu không hợp lệ." }),
         RepairTicketDetailError.InvalidWarrantyPolicy => BadRequest(new ProblemDetails { Title = "Thời hạn bảo hành tối đa là 120 tháng hoặc 36.500 ngày." }),
+        RepairTicketDetailError.ChangedByUserNotFoundOrInactive => Unauthorized(),
         _ => Problem(statusCode: StatusCodes.Status500InternalServerError)
     };
 
@@ -357,11 +396,4 @@ public class RepairTicketsController(IRepairTicketService service, IRepairTicket
         return false;
     }
 
-    private async Task<bool> ReturnToApprovalIfNeeded(RepairTicket ticket, string note)
-    {
-        if (ticket.Status != RepairStatus.InProgress) return true;
-        if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)) return false;
-        var result = await service.ChangeStatusAsync(ticket.Id, RepairStatus.WaitingForApproval, userId, note);
-        return result.Error == RepairTicketOperationError.None;
-    }
 }

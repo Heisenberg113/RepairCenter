@@ -13,7 +13,8 @@ public enum RepairTicketDetailError
     RepairTicketNotEditable,
     DetailNotFound,
     InvalidAmounts,
-    InvalidWarrantyPolicy
+    InvalidWarrantyPolicy,
+    ChangedByUserNotFoundOrInactive
 }
 
 public sealed record RepairTicketDetailResult<T>(T? Value, RepairTicketDetailError Error)

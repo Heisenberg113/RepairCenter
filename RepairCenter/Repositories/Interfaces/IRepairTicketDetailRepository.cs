@@ -10,10 +10,11 @@ public enum AddTicketDetailError
     RepairServiceNotFoundOrInactive,
     SparePartNotFound,
     SparePartInactive,
-    InsufficientStock
+    InsufficientStock,
+    ChangedByUserNotFoundOrInactive
 }
 
-public enum EditTicketDetailError { None, RepairTicketNotFound, RepairTicketNotEditable, DetailNotFound, InsufficientStock, InvalidAmounts, SparePartInactive }
+public enum EditTicketDetailError { None, RepairTicketNotFound, RepairTicketNotEditable, DetailNotFound, InsufficientStock, InvalidAmounts, SparePartInactive, ChangedByUserNotFoundOrInactive }
 
 public interface IRepairTicketDetailRepository
 {
@@ -22,7 +23,7 @@ public interface IRepairTicketDetailRepository
     Task<List<RepairTicketDetail>> GetByTicketAsync(int repairTicketId);
     Task<RepairService?> GetActiveRepairServiceAsync(int repairServiceId);
     Task<SparePart?> GetSparePartAsync(int sparePartId);
-    Task<AddTicketDetailError> AddAsync(RepairTicketDetail detail, InventoryTransaction? inventoryTransaction);
-    Task<EditTicketDetailError> UpdateAsync(int ticketId, int detailId, decimal quantity, decimal discountPercent);
-    Task<EditTicketDetailError> DeleteAsync(int ticketId, int detailId);
+    Task<AddTicketDetailError> AddAsync(RepairTicketDetail detail, InventoryTransaction? inventoryTransaction, int changedByUserId, string statusNote);
+    Task<EditTicketDetailError> UpdateAsync(int ticketId, int detailId, decimal quantity, decimal discountPercent, int changedByUserId);
+    Task<EditTicketDetailError> DeleteAsync(int ticketId, int detailId, int changedByUserId);
 }

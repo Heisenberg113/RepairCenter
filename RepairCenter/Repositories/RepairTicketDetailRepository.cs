@@ -34,7 +34,9 @@ public class RepairTicketDetailRepository(RepairCenterDbContext context) : IRepa
 
     public async Task<AddTicketDetailError> AddAsync(
         RepairTicketDetail detail,
-        InventoryTransaction? inventoryTransaction)
+        InventoryTransaction? inventoryTransaction,
+        int changedByUserId,
+        string statusNote)
     {
         await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
         var ticket = await context.RepairTickets
@@ -94,13 +96,30 @@ public class RepairTicketDetailRepository(RepairCenterDbContext context) : IRepa
         await context.RepairTicketDetails.AddAsync(detail);
         if (inventoryTransaction is not null)
             await context.InventoryTransactions.AddAsync(inventoryTransaction);
+        if (ticket.Status == RepairStatus.InProgress)
+        {
+            if (!await context.Users.AnyAsync(user => user.Id == changedByUserId && user.IsActive))
+                return await Rollback(transaction, AddTicketDetailError.ChangedByUserNotFoundOrInactive);
+
+            ticket.Status = RepairStatus.WaitingForApproval;
+            await context.RepairTicketStatusHistories.AddAsync(new RepairTicketStatusHistory
+            {
+                RepairTicketId = ticket.Id,
+                OldStatus = RepairStatus.InProgress,
+                NewStatus = RepairStatus.WaitingForApproval,
+                ChangedByUserId = changedByUserId,
+                ChangedAt = DateTime.UtcNow,
+                Note = statusNote
+            });
+        }
 
         await context.SaveChangesAsync();
         await transaction.CommitAsync();
         return AddTicketDetailError.None;
     }
 
-    public async Task<EditTicketDetailError> UpdateAsync(int ticketId, int detailId, decimal quantity, decimal discountPercent)
+    public async Task<EditTicketDetailError> UpdateAsync(
+        int ticketId, int detailId, decimal quantity, decimal discountPercent, int changedByUserId)
     {
         await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
         var ticket = await context.RepairTickets.FirstOrDefaultAsync(item => item.Id == ticketId);
@@ -141,12 +160,28 @@ public class RepairTicketDetailRepository(RepairCenterDbContext context) : IRepa
         detail.DiscountPercent = discountPercent;
         detail.DiscountAmount = decimal.Round(detail.UnitPrice * quantity * discountPercent / 100m, 2);
         detail.TotalAmount = detail.UnitPrice * quantity - detail.DiscountAmount;
+        if (ticket.Status == RepairStatus.InProgress)
+        {
+            if (!await context.Users.AnyAsync(user => user.Id == changedByUserId && user.IsActive))
+                return await Rollback(transaction, EditTicketDetailError.ChangedByUserNotFoundOrInactive);
+
+            ticket.Status = RepairStatus.WaitingForApproval;
+            await context.RepairTicketStatusHistories.AddAsync(new RepairTicketStatusHistory
+            {
+                RepairTicketId = ticket.Id,
+                OldStatus = RepairStatus.InProgress,
+                NewStatus = RepairStatus.WaitingForApproval,
+                ChangedByUserId = changedByUserId,
+                ChangedAt = DateTime.UtcNow,
+                Note = "Hạng mục thay đổi khi đang sửa; chờ khách duyệt lại báo giá."
+            });
+        }
         await context.SaveChangesAsync();
         await transaction.CommitAsync();
         return EditTicketDetailError.None;
     }
 
-    public async Task<EditTicketDetailError> DeleteAsync(int ticketId, int detailId)
+    public async Task<EditTicketDetailError> DeleteAsync(int ticketId, int detailId, int changedByUserId)
     {
         await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
         var ticket = await context.RepairTickets.FirstOrDefaultAsync(item => item.Id == ticketId);
@@ -175,6 +210,22 @@ public class RepairTicketDetailRepository(RepairCenterDbContext context) : IRepa
         }
 
         context.RepairTicketDetails.Remove(detail);
+        if (ticket.Status == RepairStatus.InProgress)
+        {
+            if (!await context.Users.AnyAsync(user => user.Id == changedByUserId && user.IsActive))
+                return await Rollback(transaction, EditTicketDetailError.ChangedByUserNotFoundOrInactive);
+
+            ticket.Status = RepairStatus.WaitingForApproval;
+            await context.RepairTicketStatusHistories.AddAsync(new RepairTicketStatusHistory
+            {
+                RepairTicketId = ticket.Id,
+                OldStatus = RepairStatus.InProgress,
+                NewStatus = RepairStatus.WaitingForApproval,
+                ChangedByUserId = changedByUserId,
+                ChangedAt = DateTime.UtcNow,
+                Note = "Hạng mục bị xóa khi đang sửa; chờ khách duyệt lại báo giá."
+            });
+        }
         await context.SaveChangesAsync();
         await transaction.CommitAsync();
         return EditTicketDetailError.None;

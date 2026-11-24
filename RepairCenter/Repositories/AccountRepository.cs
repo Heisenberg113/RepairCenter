@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using RepairCenter.Data;
 using RepairCenter.Entities;
@@ -20,10 +21,67 @@ public class AccountRepository(RepairCenterDbContext db) : IAccountRepository
         return db.Roles.Where(x => wanted.Contains(x.Name.ToUpper()) && x.IsActive).ToListAsync();
     }
     public Task<List<Role>> GetAllRolesAsync() => db.Roles.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync();
-    public Task<int> CountActiveAdminsAsync() => db.Users.CountAsync(user => user.IsActive &&
-        user.UserRoles.Any(link => link.Role.IsActive && link.Role.Name == "Admin"));
     public Task<bool> HasActiveTechnicianProfileAsync(int userId) =>
         db.Technicians.AnyAsync(x => x.UserId == userId && x.IsActive);
+    public async Task<(User? User, bool LastActiveAdmin)> UpdateRolesSafelyAsync(
+        int userId, IReadOnlyCollection<Role> roles)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        var user = await db.Users.Include(x => x.UserRoles).ThenInclude(x => x.Role)
+            .FirstOrDefaultAsync(x => x.Id == userId);
+        if (user is null)
+        {
+            await transaction.RollbackAsync();
+            return (null, false);
+        }
+
+        var wasActiveAdmin = user.IsActive && user.UserRoles.Any(x => x.Role.IsActive && x.Role.Name == "Admin");
+        var willRemainAdmin = roles.Any(x => x.IsActive && x.Name == "Admin");
+        if (wasActiveAdmin && !willRemainAdmin && await CountActiveAdminsAsync() <= 1)
+        {
+            await transaction.RollbackAsync();
+            return (user, true);
+        }
+
+        user.UserRoles.Clear();
+        foreach (var role in roles)
+            user.UserRoles.Add(new UserRole { UserId = userId, RoleId = role.Id, User = user, Role = role });
+        user.TokenVersion++;
+        await db.SaveChangesAsync();
+        await transaction.CommitAsync();
+        return (user, false);
+    }
+
+    public async Task<(User? User, bool LastActiveAdmin)> SetActiveSafelyAsync(int userId, bool isActive)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        var user = await db.Users.Include(x => x.UserRoles).ThenInclude(x => x.Role)
+            .FirstOrDefaultAsync(x => x.Id == userId);
+        if (user is null)
+        {
+            await transaction.RollbackAsync();
+            return (null, false);
+        }
+
+        var isActiveAdmin = user.IsActive && user.UserRoles.Any(x => x.Role.IsActive && x.Role.Name == "Admin");
+        if (!isActive && isActiveAdmin && await CountActiveAdminsAsync() <= 1)
+        {
+            await transaction.RollbackAsync();
+            return (user, true);
+        }
+
+        if (user.IsActive != isActive)
+        {
+            user.IsActive = isActive;
+            user.TokenVersion++;
+            await db.SaveChangesAsync();
+        }
+        await transaction.CommitAsync();
+        return (user, false);
+    }
+
+    private Task<int> CountActiveAdminsAsync() => db.Users.CountAsync(user => user.IsActive &&
+        user.UserRoles.Any(link => link.Role.IsActive && link.Role.Name == "Admin"));
     public async Task AddAsync(User user, IEnumerable<Role> roles)
     {   
         foreach (var role in roles) user.UserRoles.Add(new UserRole { User = user, RoleId = role.Id, Role = role });

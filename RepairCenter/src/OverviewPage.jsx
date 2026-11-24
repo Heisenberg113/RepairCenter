@@ -13,13 +13,13 @@ export default function OverviewPage() {
       setError('');
       const can = bridge().can;
       try {
-        const [tickets, customers, parts, technicians] = await Promise.all([
-          bridge().api('/api/repair-tickets'),
+        const [ticketPage, customers, parts, technicians] = await Promise.all([
+          bridge().api('/api/repair-tickets?page=1&pageSize=7'),
           can('Admin', 'Receptionist') ? bridge().api('/api/customers') : Promise.resolve([]),
           can('Admin', 'Technician') ? bridge().api('/api/spare-parts?lowStockOnly=true') : Promise.resolve([]),
           can('Admin', 'Receptionist') ? bridge().api('/api/technicians') : Promise.resolve([])
         ]);
-        if (!cancelled) setData({ tickets, customers, parts, technicians });
+        if (!cancelled) setData({ ticketPage, customers, parts, technicians });
       } catch (e) {
         if (!cancelled) setError(e.message || 'Không tải được dữ liệu tổng quan.');
       }
@@ -32,10 +32,9 @@ export default function OverviewPage() {
   if (error) return <div className="panel"><strong>Không tải được dữ liệu</strong><p className="muted">{error}</p><button className="button" onClick={() => window.mountOverviewReact()}>Thử lại</button></div>;
   if (!data) return <div className="empty-state">Đang tải tổng quan…</div>;
 
-  const { tickets, customers, parts, technicians } = data;
-  const activeTicketCount = tickets.filter(t => !['Delivered', 'Cancelled'].includes(bridge().enumKey(t.status))).length;
+  const { ticketPage, customers, parts, technicians } = data;
   const stats = [
-    ['Phiếu đang xử lý', activeTicketCount, `Tổng ${tickets.length} phiếu tiếp nhận`],
+    ['Phiếu đang xử lý', ticketPage.activeCount, `Tổng ${ticketPage.totalCount} phiếu tiếp nhận`],
     ['Khách hàng', bridge().can('Admin', 'Receptionist') ? customers.length : '—', 'Hồ sơ đang lưu'],
     ['Cảnh báo tồn kho', bridge().can('Admin', 'Technician') ? parts.length : '—', 'Phụ tùng cần nhập thêm'],
     ['Kỹ thuật viên hoạt động', bridge().can('Admin', 'Receptionist') ? technicians.filter(x => x.isActive).length : '—', 'Đội ngũ kỹ thuật']
@@ -50,7 +49,7 @@ export default function OverviewPage() {
         <div className="table-head"><h2>Phiếu gần đây</h2><div className="table-tools"><button className="button small soft" onClick={() => window.navigate('tickets')}>Xem tất cả →</button></div></div>
         <div className="table-scroll"><table>
           <thead><tr>{['Mã phiếu', 'Khách hàng / Thiết bị', 'Trạng thái', 'Ngày nhận'].map(x => <th key={x}>{x}</th>)}</tr></thead>
-          <tbody>{tickets.slice(0, 7).map(t => <tr key={t.id}>
+          <tbody>{ticketPage.items.map(t => <tr key={t.id}>
             <td><button className="icon-action ticket-number" onClick={() => bridge().ticketDetail(t.id)}>{t.ticketNumber}</button></td>
             <td>{t.customerName}<span className="secondary">{t.deviceBrand} {t.deviceModel}</span></td>
             <td><StatusBadge status={t.status} /></td>
