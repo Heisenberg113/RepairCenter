@@ -5,7 +5,7 @@ using RepairCenter.DTOs.RepairTickets;
 using RepairCenter.Entities;
 using RepairCenter.Enums;
 using RepairCenter.Services.Interfaces;
-using RepairCenter.Repositories.Interfaces;
+using RepairCenter.Contracts;
 
 namespace RepairCenter.Controllers;
 
@@ -15,8 +15,7 @@ namespace RepairCenter.Controllers;
 public class RepairTicketsController(
     IRepairTicketService service,
     IRepairTicketDetailService detailService,
-    IRepairIntakeService intakeService,
-    IRepairQuoteService quoteService) : ControllerBase
+    IRepairIntakeService intakeService) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedRepairTicketResponse>> GetAll(
@@ -105,14 +104,6 @@ public class RepairTicketsController(
         var nextStatus = request.NewStatus!.Value;
         if (!CanChangeStatus(ticket.Status, nextStatus))
             return Forbid();
-        if (nextStatus == RepairStatus.InProgress &&
-            !await quoteService.CurrentQuoteAcceptedAsync(id))
-            return Conflict(new ProblemDetails
-            {
-                Title = "Báo giá chưa được khách đồng ý",
-                Detail = "Cần tạo phiên bản báo giá hiện tại và ghi nhận khách đồng ý trước khi bắt đầu sửa."
-            });
-
         var result = await service.ChangeStatusAsync(
             id,
             nextStatus,
@@ -292,6 +283,11 @@ public class RepairTicketsController(
         {
             Title = "Không thể chuyển trạng thái",
             Detail = "Chuyển trạng thái này không hợp lệ theo quy trình sửa chữa."
+        }),
+        RepairTicketOperationError.QuoteNotAccepted => Conflict(new ProblemDetails
+        {
+            Title = "Báo giá chưa được khách đồng ý",
+            Detail = "Cần tạo phiên bản báo giá hiện tại và ghi nhận khách đồng ý trước khi bắt đầu sửa."
         }),
         RepairTicketOperationError.ChangedByUserNotFoundOrInactive => BadRequest(new ProblemDetails
         {

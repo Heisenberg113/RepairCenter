@@ -1,6 +1,6 @@
 using RepairCenter.Entities;
 using RepairCenter.Enums;
-using RepairCenter.Repositories.Interfaces;
+using RepairCenter.Contracts;
 namespace RepairCenter.Services.Interfaces;
 public interface IWarrantyWorkflowService
 {

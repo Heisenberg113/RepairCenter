@@ -1,10 +1,11 @@
 using RepairCenter.Entities;
-using RepairCenter.Repositories.Interfaces;
+using RepairCenter.Contracts;
 
 namespace RepairCenter.Services.Interfaces;
 
 public interface IBillingService
 {
+    Task<PagedResult<BillingListRow>> GetBillingRowsAsync(int page, int pageSize, string? search);
     Task<Invoice?> GetInvoiceAsync(int id);
     Task<Invoice?> GetInvoiceByTicketAsync(int ticketId);
     Task<(Invoice? Value, BillingError Error)> CreateInvoiceAsync(int ticketId, decimal discountPercent, decimal taxPercent, DateTime? dueAt, string? notes);

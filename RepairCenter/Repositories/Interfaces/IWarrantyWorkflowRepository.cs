@@ -1,7 +1,7 @@
 using RepairCenter.Entities;
 using RepairCenter.Enums;
+using RepairCenter.Contracts;
 namespace RepairCenter.Repositories.Interfaces;
-public enum WarrantyWorkflowError { None, WarrantyNotFound, WarrantyNotActive, WarrantyExpired, PendingClaimExists, ClaimNotFound, ClaimNotPending, NotClaimOwner, InvalidActor, InvalidRequest, ItemNotFound, ItemNotCovered, ItemWarrantyExpired, TechnicianNotQualified, ClaimAlreadyAssigned }
 public interface IWarrantyWorkflowRepository
 {
     Task<Warranty?> GetWarrantyAsync(int warrantyId);

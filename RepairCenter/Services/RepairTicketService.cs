@@ -3,12 +3,15 @@ using RepairCenter.Enums;
 using RepairCenter.Repositories.Interfaces;
 using RepairCenter.Services.Interfaces;
 using RepairCenter.Utilities;
+using RepairCenter.Contracts;
 
 namespace RepairCenter.Services;
 
-public class RepairTicketService(IRepairTicketRepository repository) : IRepairTicketService
+public class RepairTicketService(
+    IRepairTicketRepository repository,
+    IRepairQuoteService quoteService) : IRepairTicketService
 {
-    public Task<PagedResult<RepairTicket>> GetAllAsync(
+    public Task<PagedRepairTicketResult<RepairTicket>> GetAllAsync(
         int page, int pageSize, int? customerId, int? deviceId, int? technicianId,
         int? technicianUserId, RepairStatus? status,
         DateTime? receivedFrom, DateTime? receivedTo, string? search) =>
@@ -70,6 +73,9 @@ public class RepairTicketService(IRepairTicketRepository repository) : IRepairTi
         if (!Enum.IsDefined(newStatus))
             return RepairTicketOperationResult<RepairTicket>.Failure(RepairTicketOperationError.InvalidStatusTransition);
 
+        await using var transaction = newStatus == RepairStatus.InProgress
+            ? await repository.BeginSerializableTransactionAsync()
+            : null;
         var ticket = await repository.GetForUpdateAsync(repairTicketId);
         if (ticket is null)
             return RepairTicketOperationResult<RepairTicket>.Failure(RepairTicketOperationError.RepairTicketNotFound);
@@ -79,6 +85,10 @@ public class RepairTicketService(IRepairTicketRepository repository) : IRepairTi
 
         if (!IsAllowedTransition(ticket.Status, newStatus))
             return RepairTicketOperationResult<RepairTicket>.Failure(RepairTicketOperationError.InvalidStatusTransition);
+
+        if (newStatus == RepairStatus.InProgress &&
+            !await quoteService.CurrentQuoteAcceptedAsync(repairTicketId))
+            return RepairTicketOperationResult<RepairTicket>.Failure(RepairTicketOperationError.QuoteNotAccepted);
 
         if ((newStatus is RepairStatus.InProgress or RepairStatus.WaitingForParts or RepairStatus.Completed) &&
             !ticket.TechnicianId.HasValue)
@@ -104,6 +114,8 @@ public class RepairTicketService(IRepairTicketRepository repository) : IRepairTi
         };
 
         await repository.SaveChangesAsync(ticket, statusHistory);
+        if (transaction is not null)
+            await transaction.CommitAsync();
         return RepairTicketOperationResult<RepairTicket>.Success(ticket);
     }
 

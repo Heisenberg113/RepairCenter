@@ -2,11 +2,15 @@ using RepairCenter.Entities;
 using RepairCenter.Enums;
 using RepairCenter.Repositories.Interfaces;
 using RepairCenter.Services.Interfaces;
+using RepairCenter.Contracts;
 
 namespace RepairCenter.Services;
 
 public class BillingService(IBillingRepository repository) : IBillingService
 {
+    public Task<PagedResult<BillingListRow>> GetBillingRowsAsync(int page, int pageSize, string? search) =>
+        repository.GetBillingRowsAsync(page, pageSize, search);
+
     public Task<Invoice?> GetInvoiceAsync(int id) => repository.GetInvoiceAsync(id);
     public Task<Invoice?> GetInvoiceByTicketAsync(int ticketId) => repository.GetInvoiceByTicketAsync(ticketId);
     public Task<Warranty?> GetWarrantyByTicketAsync(int ticketId) => repository.GetWarrantyByTicketAsync(ticketId);

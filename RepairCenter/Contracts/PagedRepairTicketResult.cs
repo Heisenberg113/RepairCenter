@@ -1,6 +1,6 @@
-namespace RepairCenter.Repositories.Interfaces;
+namespace RepairCenter.Contracts;
 
-public sealed record PagedResult<T>(
+public sealed record PagedRepairTicketResult<T>(
     IReadOnlyList<T> Items,
     int Page,
     int PageSize,

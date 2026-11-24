@@ -1,5 +1,6 @@
 using RepairCenter.DTOs.RepairTickets;
 using RepairCenter.Entities;
+using RepairCenter.Contracts;
 using RepairCenter.Repositories.Interfaces;
 using RepairCenter.Services.Interfaces;
 

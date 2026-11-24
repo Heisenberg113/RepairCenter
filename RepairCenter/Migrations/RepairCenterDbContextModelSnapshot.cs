@@ -457,6 +457,9 @@ namespace RepairCenter.Migrations
 
                     b.HasIndex("DeviceTypeId");
 
+                    b.HasIndex("Name")
+                        .IsUnique();
+
                     b.ToTable("RepairServices");
                 });
 

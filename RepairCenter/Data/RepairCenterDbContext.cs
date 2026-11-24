@@ -163,6 +163,7 @@ public class RepairCenterDbContext(DbContextOptions<RepairCenterDbContext> optio
             entity.HasOne(x => x.DeviceType).WithMany(x => x.RepairServices)
                 .HasForeignKey(x => x.DeviceTypeId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => x.DeviceTypeId);
+            entity.HasIndex(x => x.Name).IsUnique();
         });
 
         modelBuilder.Entity<Technician>(entity =>

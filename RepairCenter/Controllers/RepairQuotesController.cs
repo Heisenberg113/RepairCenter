@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RepairCenter.DTOs.RepairTickets;
 using RepairCenter.Entities;
-using RepairCenter.Repositories.Interfaces;
+using RepairCenter.Contracts;
 using RepairCenter.Services.Interfaces;
 
 namespace RepairCenter.Controllers;

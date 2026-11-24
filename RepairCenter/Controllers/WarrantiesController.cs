@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using RepairCenter.DTOs.Warranties;
 using RepairCenter.Entities;
 using RepairCenter.Enums;
-using RepairCenter.Repositories.Interfaces;
+using RepairCenter.Contracts;
 using RepairCenter.Services.Interfaces;
 using System.Security.Claims;
 

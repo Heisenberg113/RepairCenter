@@ -1,9 +1,8 @@
 using RepairCenter.DTOs.RepairTickets;
 using RepairCenter.Entities;
+using RepairCenter.Contracts;
 
 namespace RepairCenter.Repositories.Interfaces;
-
-public enum RepairQuoteError { None, TicketNotFound, TicketClosed, NoDetails, VersionNotFound }
 
 public interface IRepairQuoteRepository
 {

@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using RepairCenter.DTOs.Invoices;
 using RepairCenter.Entities;
-using RepairCenter.Repositories.Interfaces;
+using RepairCenter.Contracts;
 using RepairCenter.Services.Interfaces;
 using System.Security.Claims;
 
@@ -13,6 +13,41 @@ namespace RepairCenter.Controllers;
 [Authorize(Roles = "Admin,Receptionist")]
 public class InvoicesController(IBillingService service) : ControllerBase
 {
+    [HttpGet]
+    public async Task<ActionResult<PagedBillingListResponse>> GetAll(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? search = null)
+    {
+        if (page < 1 || pageSize is < 1 or > 100 || page > int.MaxValue / pageSize + 1 ||
+            search?.Length > 200)
+            return BadRequest(new ProblemDetails { Title = "Tham số phân trang hoặc tìm kiếm không hợp lệ." });
+
+        var result = await service.GetBillingRowsAsync(page, pageSize, search);
+        return Ok(new PagedBillingListResponse
+        {
+            Items = result.Items.Select(row => new BillingListItemResponse
+            {
+                TicketId = row.TicketId,
+                TicketNumber = row.TicketNumber,
+                CustomerName = row.CustomerName,
+                DeviceBrand = row.DeviceBrand,
+                DeviceModel = row.DeviceModel,
+                Invoice = row.InvoiceId.HasValue
+                    ? new BillingInvoiceSummaryResponse
+                    {
+                        Id = row.InvoiceId.Value,
+                        InvoiceNumber = row.InvoiceNumber!,
+                        PaymentStatus = row.PaymentStatus!.Value
+                    }
+                    : null
+            }).ToList(),
+            Page = result.Page,
+            PageSize = result.PageSize,
+            TotalCount = result.TotalCount
+        });
+    }
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<InvoiceResponse>> GetById(int id)
     {

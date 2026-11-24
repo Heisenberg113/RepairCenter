@@ -1,11 +1,11 @@
 using RepairCenter.Entities;
+using RepairCenter.Contracts;
 
 namespace RepairCenter.Repositories.Interfaces;
 
-public enum BillingError { None, TicketNotFound, TicketNotCompleted, TicketHasNoDetails, InvoiceNotFound, InvoiceAlreadyExists, InvoiceNotIssued, InvalidAmount, Overpayment, WarrantyNotFound, TicketNotDelivered, WarrantyAlreadyExists, InvalidProcessor, PaymentNotFound, PaymentNotRefundable, RefundExceedsAvailable, NoWarrantyCoverage, InvalidWarrantyPolicy }
-
 public interface IBillingRepository
 {
+    Task<PagedResult<BillingListRow>> GetBillingRowsAsync(int page, int pageSize, string? search);
     Task<Invoice?> GetInvoiceAsync(int id);
     Task<Invoice?> GetInvoiceByTicketAsync(int ticketId);
     Task<BillingError> CreateInvoiceAsync(Invoice invoice);

@@ -7,6 +7,7 @@ using RepairCenter.Data;
 using RepairCenter.DTOs.RepairTickets;
 using RepairCenter.Entities;
 using RepairCenter.Enums;
+using RepairCenter.Contracts;
 using RepairCenter.Repositories.Interfaces;
 
 namespace RepairCenter.Repositories;

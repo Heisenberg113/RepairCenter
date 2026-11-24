@@ -1,5 +1,6 @@
 using RepairCenter.Entities;
 using RepairCenter.Enums;
+using RepairCenter.Contracts;
 using RepairCenter.Repositories.Interfaces;
 using RepairCenter.Services.Interfaces;
 

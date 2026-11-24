@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import StatusBadge from './StatusBadge.jsx';
 
 const b = () => window.repairCenterBridge;
@@ -15,7 +15,9 @@ export default function TicketsPage() {
   const [selectedId, setSelectedId] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
   const refresh = useCallback(async () => {
+    const currentRequest = ++requestId.current;
     setLoading(true);
     setError('');
     try {
@@ -29,6 +31,7 @@ export default function TicketsPage() {
         params.set('receivedTo', end.toISOString());
       }
       const result = await b().api(`/api/repair-tickets?${params}`);
+      if (currentRequest !== requestId.current) return;
       const lastPage = Math.max(1, Math.ceil(result.totalCount / pageSize));
       if (page > lastPage) {
         setPage(lastPage);
@@ -37,9 +40,11 @@ export default function TicketsPage() {
       setRows(result.items);
       setTotalCount(result.totalCount);
     } catch (e) {
-      setError(e.message || 'Không tải được danh sách phiếu.');
+      if (currentRequest === requestId.current)
+        setError(e.message || 'Không tải được danh sách phiếu.');
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current)
+        setLoading(false);
     }
   }, [page, pageSize, query, receivedFrom, receivedTo, status]);
 
@@ -52,6 +57,7 @@ export default function TicketsPage() {
     window.addEventListener('repair-tickets-changed', onTicketMutation);
     return () => {
       window.removeEventListener('repair-tickets-changed', onTicketMutation);
+      requestId.current++;
     };
   }, [refresh]);
 

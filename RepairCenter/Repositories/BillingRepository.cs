@@ -4,11 +4,49 @@ using RepairCenter.Data;
 using RepairCenter.Entities;
 using RepairCenter.Enums;
 using RepairCenter.Repositories.Interfaces;
+using RepairCenter.Contracts;
 
 namespace RepairCenter.Repositories;
 
 public class BillingRepository(RepairCenterDbContext context) : IBillingRepository
 {
+    public async Task<PagedResult<BillingListRow>> GetBillingRowsAsync(int page, int pageSize, string? search)
+    {
+        var tickets = context.RepairTickets.AsNoTracking()
+            .Where(x => x.Status == RepairStatus.Completed || x.Status == RepairStatus.Delivered);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            tickets = tickets.Where(x =>
+                x.TicketNumber.Contains(term) ||
+                x.Customer.Name.Contains(term) ||
+                x.Device.Brand.Contains(term) ||
+                x.Device.Model.Contains(term));
+        }
+
+        var totalCount = await tickets.CountAsync();
+        var rows = await (
+            from ticket in tickets
+            join invoice in context.Invoices.AsNoTracking()
+                on ticket.Id equals invoice.RepairTicketId into ticketInvoices
+            from invoice in ticketInvoices.DefaultIfEmpty()
+            orderby (ticket.CompletedAt ?? ticket.DeliveredAt ?? ticket.ReceivedAt) descending, ticket.Id descending
+            select new BillingListRow(
+                ticket.Id,
+                ticket.TicketNumber,
+                ticket.Customer.Name,
+                ticket.Device.Brand,
+                ticket.Device.Model,
+                invoice == null ? null : invoice.Id,
+                invoice == null ? null : invoice.InvoiceNumber,
+                invoice == null ? null : invoice.PaymentStatus))
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<BillingListRow>(rows, page, pageSize, totalCount);
+    }
+
     public Task<Invoice?> GetInvoiceAsync(int id) => context.Invoices.AsNoTracking()
         .Include(x => x.RepairTicket).Include(x => x.Payments).ThenInclude(x => x.ProcessedByUser)
         .FirstOrDefaultAsync(x => x.Id == id);

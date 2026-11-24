@@ -1,6 +1,6 @@
 using RepairCenter.DTOs.RepairTickets;
 using RepairCenter.Entities;
-using RepairCenter.Repositories.Interfaces;
+using RepairCenter.Contracts;
 
 namespace RepairCenter.Services.Interfaces;
 

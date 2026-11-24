@@ -1,9 +1,8 @@
 using RepairCenter.DTOs.RepairTickets;
 using RepairCenter.Entities;
+using RepairCenter.Contracts;
 
 namespace RepairCenter.Repositories.Interfaces;
-
-public enum RepairIntakeError { None, CustomerNotFound, DeviceNotFoundForCustomer, DeviceTypeNotFound }
 
 public interface IRepairIntakeRepository
 {

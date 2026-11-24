@@ -1,13 +1,15 @@
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 using RepairCenter.Data;
 using RepairCenter.Entities;
 using RepairCenter.Repositories.Interfaces;
+using RepairCenter.Contracts;
 
 namespace RepairCenter.Repositories;
 
 public class RepairTicketRepository(RepairCenterDbContext context) : IRepairTicketRepository
 {
-    public async Task<PagedResult<RepairTicket>> GetAllAsync(
+    public async Task<PagedRepairTicketResult<RepairTicket>> GetAllAsync(
         int page, int pageSize, int? customerId, int? deviceId, int? technicianId,
         int? technicianUserId, RepairCenter.Enums.RepairStatus? status,
         DateTime? receivedFrom, DateTime? receivedTo, string? search)
@@ -62,7 +64,7 @@ public class RepairTicketRepository(RepairCenterDbContext context) : IRepairTick
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
-        return new PagedResult<RepairTicket>(items, page, pageSize, totalCount, activeCount);
+        return new PagedRepairTicketResult<RepairTicket>(items, page, pageSize, totalCount, activeCount);
     }
 
     public Task<RepairTicket?> GetByIdAsync(int id) => context.RepairTickets
@@ -116,6 +118,9 @@ public class RepairTicketRepository(RepairCenterDbContext context) : IRepairTick
 
     public Task<bool> UserIsActiveAsync(int userId) =>
         context.Users.AnyAsync(user => user.Id == userId && user.IsActive);
+
+    public Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginSerializableTransactionAsync() =>
+        context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
 
     public async Task AddAsync(RepairTicket ticket)
     {

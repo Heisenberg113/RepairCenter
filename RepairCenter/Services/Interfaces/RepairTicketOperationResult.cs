@@ -9,6 +9,7 @@ public enum RepairTicketOperationError
     TechnicianNotFoundOrInactive,
     TechnicianNotQualifiedForDevice,
     InvalidStatusTransition,
+    QuoteNotAccepted,
     ChangedByUserNotFoundOrInactive,
     TechnicianRequiredForStatus,
     TicketIsClosed,

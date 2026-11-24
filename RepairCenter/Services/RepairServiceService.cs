@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using RepairCenter.Entities;
 using RepairCenter.Repositories.Interfaces;
 using RepairCenter.Services.Interfaces;
@@ -18,7 +19,16 @@ public sealed class RepairServiceService(IRepairServiceRepository repository) : 
         if (await repository.NameExistsAsync(name)) return RepairServiceOperationResult<RepairService>.Failure(RepairServiceOperationError.DuplicateName);
         if (!ValidWarranty(warrantyDuration, warrantyDurationUnit)) return RepairServiceOperationResult<RepairService>.Failure(RepairServiceOperationError.InvalidWarranty);
         var service = new RepairService { DeviceTypeId = deviceTypeId, Name = name, Description = Normalize(description), UnitPrice = unitPrice, WarrantyDuration = warrantyDuration, WarrantyDurationUnit = warrantyDurationUnit, WarrantyTerms = Normalize(warrantyTerms) };
-        await repository.AddAsync(service);
+        try
+        {
+            await repository.AddAsync(service);
+        }
+        catch (DbUpdateException)
+        {
+            if (await repository.NameExistsAsync(name))
+                return RepairServiceOperationResult<RepairService>.Failure(RepairServiceOperationError.DuplicateName);
+            throw;
+        }
         return RepairServiceOperationResult<RepairService>.Success(service);
     }
 
@@ -40,7 +50,16 @@ public sealed class RepairServiceService(IRepairServiceRepository repository) : 
         service.WarrantyDuration = warrantyDuration;
         service.WarrantyDurationUnit = warrantyDurationUnit;
         service.WarrantyTerms = Normalize(warrantyTerms);
-        await repository.SaveAsync();
+        try
+        {
+            await repository.SaveAsync();
+        }
+        catch (DbUpdateException)
+        {
+            if (await repository.NameExistsAsync(name, id))
+                return RepairServiceOperationResult<RepairService>.Failure(RepairServiceOperationError.DuplicateName);
+            throw;
+        }
         return RepairServiceOperationResult<RepairService>.Success(service);
     }
 

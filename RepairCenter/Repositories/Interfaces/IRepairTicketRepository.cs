@@ -1,11 +1,12 @@
 using RepairCenter.Entities;
+using RepairCenter.Contracts;
 using RepairCenter.Services.Interfaces;
 
 namespace RepairCenter.Repositories.Interfaces;
 
 public interface IRepairTicketRepository
 {
-    Task<PagedResult<RepairTicket>> GetAllAsync(
+    Task<PagedRepairTicketResult<RepairTicket>> GetAllAsync(
         int page, int pageSize, int? customerId, int? deviceId, int? technicianId,
         int? technicianUserId, RepairCenter.Enums.RepairStatus? status,
         DateTime? receivedFrom, DateTime? receivedTo, string? search);
@@ -18,6 +19,7 @@ public interface IRepairTicketRepository
     Task<Device?> GetDeviceForCustomerAsync(int deviceId, int customerId);
     Task<Technician?> GetActiveTechnicianAsync(int technicianId);
     Task<bool> UserIsActiveAsync(int userId);
+    Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginSerializableTransactionAsync();
     Task AddAsync(RepairTicket ticket);
     Task SaveChangesAsync(RepairTicket ticket, RepairTicketStatusHistory? statusHistory = null);
 }

@@ -93,6 +93,8 @@ public sealed class CatalogChangeRequestService(ICatalogChangeRequestRepository 
         if (row is null) return NotFound<CatalogChangeRequest>();
         if (row.Status != "Pending") return Conflict<CatalogChangeRequest>("Yêu cầu không còn ở trạng thái chờ duyệt.");
         if (string.IsNullOrWhiteSpace(request.Note)) return Invalid<CatalogChangeRequest>("Cần ghi lý do từ chối.");
+        if (request.Note.Trim().Length > 1000)
+            return Invalid<CatalogChangeRequest>("Lý do từ chối không được vượt quá 1.000 ký tự.");
         row.Status = "Rejected";
         row.ResolvedByUserId = adminId;
         row.ResolvedAt = DateTime.UtcNow;
