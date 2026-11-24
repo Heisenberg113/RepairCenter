@@ -12,4 +12,5 @@ public class RepairQuoteVersionResponse
     public DateTime? RespondedAt { get; set; }
     public string? ResponseChannel { get; set; }
     public string? ResponseNote { get; set; }
+    public bool IsDuplicate { get; set; }
 }

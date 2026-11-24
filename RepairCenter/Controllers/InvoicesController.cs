@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using RepairCenter.DTOs.Invoices;
 using RepairCenter.Entities;
-using RepairCenter.Enums;
 using RepairCenter.Repositories.Interfaces;
 using RepairCenter.Services.Interfaces;
 using System.Security.Claims;
@@ -91,17 +90,9 @@ public class InvoicesController(IBillingService service) : ControllerBase
         IssuedAt = invoice.IssuedAt, DueAt = invoice.DueAt, Subtotal = invoice.Subtotal,
         DiscountPercent = invoice.DiscountPercent, DiscountAmount = invoice.DiscountAmount,
         TaxPercent = invoice.TaxPercent, TaxAmount = invoice.TaxAmount, TotalAmount = invoice.TotalAmount, AmountPaid = invoice.AmountPaid,
-        PaymentStatus = CurrentPaymentStatus(invoice), PaidAt = invoice.PaidAt, Notes = invoice.Notes,
+        PaymentStatus = invoice.PaymentStatus, PaidAt = invoice.PaidAt, Notes = invoice.Notes,
         Payments = invoice.Payments.OrderBy(x => x.PaidAt).Select(x => ToPaymentResponse(x)).ToList()
     };
-
-    private static PaymentStatus CurrentPaymentStatus(Invoice invoice)
-    {
-        if (invoice.AmountPaid >= invoice.TotalAmount) return PaymentStatus.Paid;
-        if (invoice.DueAt.HasValue && invoice.DueAt.Value <= DateTime.UtcNow)
-            return PaymentStatus.Overdue;
-        return invoice.AmountPaid > 0 ? PaymentStatus.PartiallyPaid : PaymentStatus.Pending;
-    }
 
     private bool TryGetProcessorId(out int processorId) =>
         int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out processorId);

@@ -116,7 +116,7 @@ public class RepairTicketsController(IRepairTicketService service, IRepairTicket
             NewStatus = entry.NewStatus,
             ChangedByUserId = entry.ChangedByUserId,
             ChangedByUserName = entry.ChangedByUser.FullName,
-            ChangedAt = entry.ChangedAt,
+            ChangedAt = DateTime.SpecifyKind(entry.ChangedAt, DateTimeKind.Utc),
             Note = entry.Note
         }));
     }

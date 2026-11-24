@@ -136,8 +136,8 @@ public class RepairTicketService(IRepairTicketRepository repository) : IRepairTi
     private static bool IsAllowedTransition(RepairStatus current, RepairStatus next) => (current, next) switch
     {
         (RepairStatus.Received, RepairStatus.Diagnosing or RepairStatus.Cancelled) => true,
-        (RepairStatus.Diagnosing, RepairStatus.WaitingForApproval or RepairStatus.InProgress or RepairStatus.WaitingForParts or RepairStatus.Cancelled) => true,
-        (RepairStatus.WaitingForApproval, RepairStatus.InProgress or RepairStatus.Cancelled) => true,
+        (RepairStatus.Diagnosing, RepairStatus.WaitingForApproval or RepairStatus.InProgress or RepairStatus.Cancelled) => true,
+        (RepairStatus.WaitingForApproval, RepairStatus.InProgress or RepairStatus.WaitingForParts or RepairStatus.Cancelled) => true,
         (RepairStatus.InProgress, RepairStatus.WaitingForApproval or RepairStatus.WaitingForParts or RepairStatus.Completed or RepairStatus.Cancelled) => true,
         (RepairStatus.WaitingForParts, RepairStatus.InProgress or RepairStatus.Cancelled) => true,
         (RepairStatus.Completed, RepairStatus.Delivered) => true,

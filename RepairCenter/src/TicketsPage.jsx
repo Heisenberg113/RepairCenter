@@ -170,7 +170,9 @@ function TicketDetail({ id, onClose, onChanged }) {
     if (!window.confirm('Tạo và lưu phiên bản báo giá từ các hạng mục hiện tại?')) return;
     try {
       const q = await b().api(`/api/repair-tickets/${id}/quotes`, { method: 'POST', body: {} });
-      b().toast?.(`Đã tạo báo giá phiên bản ${q.versionNumber}`);
+      b().toast?.(q.isDuplicate
+        ? `Báo giá không thay đổi; giữ nguyên phiên bản ${q.versionNumber}`
+        : `Đã tạo báo giá phiên bản ${q.versionNumber}`);
       await loadTicket();
       onChanged?.();
       window.dispatchEvent(new CustomEvent('repair-tickets-changed', { detail: { path: `/api/repair-tickets/${id}/quotes`, method: 'POST' } }));
@@ -207,7 +209,7 @@ function TicketDetail({ id, onClose, onChanged }) {
         <span className="quick-actions">
           <button className="button small" onClick={() => b().openQuoteVersion(id, q.id, false)}>Xem báo giá</button>
           <button className="button small" onClick={() => b().openQuoteVersion(id, q.id, true)}>In báo giá</button>
-          {b().can('Admin', 'Receptionist') && q.versionNumber === quotes[quotes.length - 1].versionNumber && (
+          {b().can('Admin', 'Receptionist') && !closed && q.versionNumber === quotes[quotes.length - 1].versionNumber && (
             <button className="button small" onClick={() => window.openWorkflowDialog?.('quoteResponse', { ticketId: id, versionId: q.id })}>
               Ghi nhận phản hồi
             </button>
@@ -299,12 +301,17 @@ function TicketDetail({ id, onClose, onChanged }) {
             <div>
               <strong>Lịch sử trạng thái</strong>
               <div className="timeline">
-                {history.map(x => (
-                  <div className="timeline-item" key={x.id}>
-                    <strong>{b().statusLabels[b().enumKey(x.newStatus)] || x.newStatus}</strong>
-                    <small>{b().date(x.changedAt)} · {x.changedByUserName || ''}{x.note ? ` · ${x.note}` : ''}</small>
-                  </div>
-                ))}
+                {history.map(x => {
+                  const isQuoteChange = x.note === 'Thay đổi báo giá';
+                  return (
+                    <div className="timeline-item" key={x.id}>
+                      <strong>{isQuoteChange
+                        ? 'Thay đổi báo giá'
+                        : b().statusLabels[b().enumKey(x.newStatus)] || x.newStatus}</strong>
+                      <small>{b().date(x.changedAt)} · {x.changedByUserName || ''}{x.note && !isQuoteChange ? ` · ${x.note}` : ''}</small>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

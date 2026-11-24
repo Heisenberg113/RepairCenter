@@ -106,7 +106,9 @@ public class BillingRepository(RepairCenterDbContext context) : IBillingReposito
         refund.Type = InvoicePaymentType.Refund;
         refund.PaidAt = DateTime.UtcNow;
         payment.Invoice.AmountPaid -= refund.Amount;
-        payment.Invoice.PaymentStatus = GetPaymentStatus(payment.Invoice);
+        payment.Invoice.PaymentStatus = payment.Invoice.AmountPaid == 0
+            ? PaymentStatus.Refunded
+            : GetPaymentStatus(payment.Invoice);
         payment.Invoice.PaidAt = null;
         await context.InvoicePayments.AddAsync(refund);
         await context.SaveChangesAsync();
