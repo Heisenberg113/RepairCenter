@@ -5,6 +5,7 @@ namespace RepairCenter.Repositories.Interfaces;
 public interface IDeviceRepository
 {
     Task<List<Device>> GetAllAsync(int? customerId = null, int? deviceTypeId = null);
+    Task<List<Device>> SearchAsync(int customerId, string query, int limit);
     Task<Device?> GetByIdAsync(int id);
     Task<Customer?> GetCustomerAsync(int customerId);
     Task<DeviceType?> GetDeviceTypeAsync(int deviceTypeId);

@@ -24,6 +24,24 @@ public class DeviceRepository(RepairCenterDbContext context) : IDeviceRepository
         return await query.OrderBy(device => device.Id).ToListAsync();
     }
 
+    public async Task<List<Device>> SearchAsync(int customerId, string query, int limit)
+    {
+        return await context.Devices
+            .AsNoTracking()
+            .Include(device => device.Customer)
+            .Include(device => device.DeviceType)
+            .Where(device => device.CustomerId == customerId &&
+                (device.Brand.Contains(query) ||
+                 device.Model.Contains(query) ||
+                 (device.SerialNumber != null && device.SerialNumber.Contains(query)) ||
+                 (device.DeviceType != null && device.DeviceType.Name.Contains(query))))
+            .OrderBy(device => device.Brand)
+            .ThenBy(device => device.Model)
+            .ThenBy(device => device.Id)
+            .Take(limit)
+            .ToListAsync();
+    }
+
     public Task<Device?> GetByIdAsync(int id) => context.Devices
         .Include(device => device.Customer)
         .Include(device => device.DeviceType)

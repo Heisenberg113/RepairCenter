@@ -18,6 +18,11 @@ namespace RepairCenter.Services
             return _repository.GetAllAsync();
         }
 
+        public Task<List<Customer>> SearchAsync(string query, int limit)
+        {
+            return _repository.SearchAsync(query, limit);
+        }
+
         public Task<Customer?> GetByIdAsync(int id)
         {
             return _repository.GetByIdAsync(id);

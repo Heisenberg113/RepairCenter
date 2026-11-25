@@ -19,6 +19,18 @@ public class CustomersController(ICustomerService service) : ControllerBase
         return Ok(customers.Select(ToResponse));
     }
 
+    [HttpGet("search")]
+    public async Task<ActionResult<IEnumerable<CustomerResponse>>> Search(
+        [FromQuery] string? query,
+        [FromQuery] int limit = 20)
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Trim().Length < 2 || limit is < 1 or > 50)
+            return BadRequest(new ProblemDetails { Title = "Nhập ít nhất 2 ký tự và giới hạn kết quả từ 1 đến 50." });
+
+        var customers = await service.SearchAsync(query.Trim(), limit);
+        return Ok(customers.Select(ToResponse));
+    }
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<CustomerResponse>> GetById(int id)
     {

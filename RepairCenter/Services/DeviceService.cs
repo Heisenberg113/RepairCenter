@@ -9,6 +9,9 @@ public class DeviceService(IDeviceRepository repository) : IDeviceService
     public Task<List<Device>> GetAllAsync(int? customerId = null, int? deviceTypeId = null) =>
         repository.GetAllAsync(customerId, deviceTypeId);
 
+    public Task<List<Device>> SearchAsync(int customerId, string query, int limit) =>
+        repository.SearchAsync(customerId, query, limit);
+
     public Task<Device?> GetByIdAsync(int id) => repository.GetByIdAsync(id);
 
     public async Task<DeviceOperationResult<Device>> CreateAsync(Device device)

@@ -21,6 +21,20 @@ public class DevicesController(IDeviceService service) : ControllerBase
         return Ok(devices.Select(ToResponse));
     }
 
+    [HttpGet("search")]
+    public async Task<ActionResult<IEnumerable<DeviceResponse>>> Search(
+        [FromQuery] int customerId,
+        [FromQuery] string? query,
+        [FromQuery] int limit = 20)
+    {
+        if (customerId < 1 || string.IsNullOrWhiteSpace(query) || query.Trim().Length < 2 ||
+            limit is < 1 or > 50)
+            return BadRequest(new ProblemDetails { Title = "Chọn khách hàng, nhập ít nhất 2 ký tự và giới hạn kết quả từ 1 đến 50." });
+
+        var devices = await service.SearchAsync(customerId, query.Trim(), limit);
+        return Ok(devices.Select(ToResponse));
+    }
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<DeviceResponse>> GetById(int id)
     {
