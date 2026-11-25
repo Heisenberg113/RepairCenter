@@ -10,4 +10,6 @@ public sealed record BillingListRow(
     string DeviceModel,
     int? InvoiceId,
     string? InvoiceNumber,
-    PaymentStatus? PaymentStatus);
+    PaymentStatus? PaymentStatus,
+    decimal? OutstandingAmount,
+    DateTime? DueAt);

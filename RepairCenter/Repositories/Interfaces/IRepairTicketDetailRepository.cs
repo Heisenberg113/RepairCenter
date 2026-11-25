@@ -8,6 +8,7 @@ public enum AddTicketDetailError
     RepairTicketNotFound,
     RepairTicketClosed,
     RepairServiceNotFoundOrInactive,
+    DeviceTypeMismatch,
     SparePartNotFound,
     SparePartInactive,
     InsufficientStock,

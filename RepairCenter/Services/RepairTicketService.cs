@@ -14,9 +14,9 @@ public class RepairTicketService(
     public Task<PagedRepairTicketResult<RepairTicket>> GetAllAsync(
         int page, int pageSize, int? customerId, int? deviceId, int? technicianId,
         int? technicianUserId, RepairStatus? status,
-        DateTime? receivedFrom, DateTime? receivedTo, string? search) =>
+        DateTime? receivedFrom, DateTime? receivedTo, string? search, bool oldestFirst) =>
         repository.GetAllAsync(page, pageSize, customerId, deviceId, technicianId,
-            technicianUserId, status, receivedFrom, receivedTo, search);
+            technicianUserId, status, receivedFrom, receivedTo, search, oldestFirst);
 
     public Task<RepairTicket?> GetByIdAsync(int id) => repository.GetByIdAsync(id);
     public Task<RepairTicket?> GetByTicketNumberAsync(string ticketNumber) => repository.GetByTicketNumberAsync(ticketNumber);

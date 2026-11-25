@@ -5,7 +5,8 @@ namespace RepairCenter.Repositories.Interfaces;
 
 public interface IBillingRepository
 {
-    Task<PagedResult<BillingListRow>> GetBillingRowsAsync(int page, int pageSize, string? search);
+    Task<PagedResult<BillingListRow>> GetBillingRowsAsync(
+        int page, int pageSize, string? search, BillingListStatus? status, bool dueDateDescending);
     Task<Invoice?> GetInvoiceAsync(int id);
     Task<Invoice?> GetInvoiceByTicketAsync(int ticketId);
     Task<BillingError> CreateInvoiceAsync(Invoice invoice);

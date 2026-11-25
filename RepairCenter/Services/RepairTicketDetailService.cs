@@ -27,6 +27,8 @@ public class RepairTicketDetailService(IRepairTicketDetailRepository repository)
         var service = await repository.GetActiveRepairServiceAsync(serviceId);
         if (service is null)
             return Failure(RepairTicketDetailError.RepairServiceNotFoundOrInactive);
+        if (service.DeviceTypeId != ticket.Device.DeviceTypeId)
+            return Failure(RepairTicketDetailError.DeviceTypeMismatch);
 
         var unitPrice = ticket.IsWarrantyRepair ? 0 : service.UnitPrice;
         var subtotal = unitPrice * quantity;
@@ -74,6 +76,8 @@ public class RepairTicketDetailService(IRepairTicketDetailRepository repository)
             return Failure(RepairTicketDetailError.SparePartNotFound);
         if (!part.IsActive)
             return Failure(RepairTicketDetailError.SparePartInactive);
+        if (part.DeviceTypeId != ticket.Device.DeviceTypeId)
+            return Failure(RepairTicketDetailError.DeviceTypeMismatch);
 
         var subtotal = part.SellingPrice * quantity;
         var discountAmount = decimal.Round(subtotal * discountPercent / 100m, 2);
@@ -152,6 +156,7 @@ public class RepairTicketDetailService(IRepairTicketDetailRepository repository)
                 AddTicketDetailError.RepairTicketNotFound => RepairTicketDetailError.RepairTicketNotFound,
                 AddTicketDetailError.RepairTicketClosed => RepairTicketDetailError.RepairTicketClosed,
                 AddTicketDetailError.RepairServiceNotFoundOrInactive => RepairTicketDetailError.RepairServiceNotFoundOrInactive,
+                AddTicketDetailError.DeviceTypeMismatch => RepairTicketDetailError.DeviceTypeMismatch,
                 AddTicketDetailError.SparePartNotFound => RepairTicketDetailError.SparePartNotFound,
                 AddTicketDetailError.SparePartInactive => RepairTicketDetailError.SparePartInactive,
                 AddTicketDetailError.InsufficientStock => RepairTicketDetailError.InsufficientStock,

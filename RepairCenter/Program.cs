@@ -11,6 +11,7 @@ using RepairCenter.Repositories;
 using RepairCenter.Repositories.Interfaces;
 using RepairCenter.Services;
 using RepairCenter.Services.Interfaces;
+using RepairCenter.Utilities;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,7 +23,8 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<RepairCenterDbContext>(options =>
     options.UseSqlServer(connectionString));
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(options =>
+    options.JsonSerializerOptions.Converters.Add(new UtcDateTimeJsonConverter()));
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 var jwtSection = builder.Configuration.GetSection("Jwt");

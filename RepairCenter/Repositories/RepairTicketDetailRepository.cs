@@ -14,6 +14,7 @@ public class RepairTicketDetailRepository(RepairCenterDbContext context) : IRepa
 
     public Task<RepairTicket?> GetTicketAsync(int repairTicketId) => context.RepairTickets
         .AsNoTracking()
+        .Include(ticket => ticket.Device)
         .FirstOrDefaultAsync(ticket => ticket.Id == repairTicketId);
 
     public Task<List<RepairTicketDetail>> GetByTicketAsync(int repairTicketId) => context.RepairTicketDetails
@@ -40,6 +41,7 @@ public class RepairTicketDetailRepository(RepairCenterDbContext context) : IRepa
     {
         await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
         var ticket = await context.RepairTickets
+            .Include(item => item.Device)
             .FirstOrDefaultAsync(item => item.Id == detail.RepairTicketId);
 
         if (ticket is null)
@@ -56,18 +58,27 @@ public class RepairTicketDetailRepository(RepairCenterDbContext context) : IRepa
 
         if (detail.RepairServiceId.HasValue)
         {
-            var serviceIsActive = await context.RepairServices.AnyAsync(service =>
-                service.Id == detail.RepairServiceId.Value && service.IsActive);
-            if (!serviceIsActive)
+            var service = await context.RepairServices
+                .Where(item => item.Id == detail.RepairServiceId.Value)
+                .Select(item => new { item.IsActive, item.DeviceTypeId })
+                .FirstOrDefaultAsync();
+            if (service is null || !service.IsActive)
             {
                 await transaction.RollbackAsync();
                 return AddTicketDetailError.RepairServiceNotFoundOrInactive;
+            }
+            if (service.DeviceTypeId != ticket.Device.DeviceTypeId)
+            {
+                await transaction.RollbackAsync();
+                return AddTicketDetailError.DeviceTypeMismatch;
             }
         }
         else if (detail.SparePartId.HasValue)
         {
             var updateCount = await context.SpareParts
-                .Where(part => part.Id == detail.SparePartId.Value && part.IsActive && part.QuantityInStock >= detail.Quantity)
+                .Where(part => part.Id == detail.SparePartId.Value && part.IsActive &&
+                    part.DeviceTypeId == ticket.Device.DeviceTypeId &&
+                    part.QuantityInStock >= detail.Quantity)
                 .ExecuteUpdateAsync(update => update.SetProperty(
                     part => part.QuantityInStock,
                     part => part.QuantityInStock - detail.Quantity));
@@ -76,7 +87,7 @@ public class RepairTicketDetailRepository(RepairCenterDbContext context) : IRepa
             {
                 var part = await context.SpareParts.AsNoTracking()
                     .Where(item => item.Id == detail.SparePartId.Value)
-                    .Select(item => new { item.IsActive })
+                    .Select(item => new { item.IsActive, item.DeviceTypeId })
                     .FirstOrDefaultAsync();
                 await transaction.RollbackAsync();
 
@@ -84,6 +95,8 @@ public class RepairTicketDetailRepository(RepairCenterDbContext context) : IRepa
                     return AddTicketDetailError.SparePartNotFound;
                 if (!part.IsActive)
                     return AddTicketDetailError.SparePartInactive;
+                if (part.DeviceTypeId != ticket.Device.DeviceTypeId)
+                    return AddTicketDetailError.DeviceTypeMismatch;
                 return AddTicketDetailError.InsufficientStock;
             }
         }

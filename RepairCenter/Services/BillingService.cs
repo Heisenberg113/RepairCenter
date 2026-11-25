@@ -3,13 +3,15 @@ using RepairCenter.Enums;
 using RepairCenter.Repositories.Interfaces;
 using RepairCenter.Services.Interfaces;
 using RepairCenter.Contracts;
+using RepairCenter.Utilities;
 
 namespace RepairCenter.Services;
 
 public class BillingService(IBillingRepository repository) : IBillingService
 {
-    public Task<PagedResult<BillingListRow>> GetBillingRowsAsync(int page, int pageSize, string? search) =>
-        repository.GetBillingRowsAsync(page, pageSize, search);
+    public Task<PagedResult<BillingListRow>> GetBillingRowsAsync(
+        int page, int pageSize, string? search, BillingListStatus? status, bool dueDateDescending) =>
+        repository.GetBillingRowsAsync(page, pageSize, search, status, dueDateDescending);
 
     public Task<Invoice?> GetInvoiceAsync(int id) => repository.GetInvoiceAsync(id);
     public Task<Invoice?> GetInvoiceByTicketAsync(int ticketId) => repository.GetInvoiceByTicketAsync(ticketId);
@@ -17,18 +19,19 @@ public class BillingService(IBillingRepository repository) : IBillingService
     public Task<Warranty?> GetWarrantyByCodeAsync(string code) => repository.GetWarrantyByCodeAsync(code);
     public Task<int> MarkOverdueInvoicesAsync(DateTime now) => repository.MarkOverdueInvoicesAsync(now);
 
-    public async Task<(Invoice? Value, BillingError Error)> CreateInvoiceAsync(int ticketId, decimal discountPercent, decimal taxPercent, DateTime? dueAt, string? notes)
+    public async Task<(Invoice? Value, BillingError Error)> CreateInvoiceAsync(int ticketId, decimal discountPercent, decimal taxPercent, DateOnly? dueAt, string? notes)
     {
         if (discountPercent is < 0 or > 100 || taxPercent is < 0 or > 100 ||
             discountPercent != decimal.Round(discountPercent, 4) || taxPercent != decimal.Round(taxPercent, 4))
             return (null, BillingError.InvalidAmount);
         var issuedAt = DateTime.UtcNow;
+        var dueDate = dueAt ?? Gmt7Clock.Today.AddDays(30);
         var invoice = new Invoice
         {
             InvoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid():N}"[..25].ToUpperInvariant(),
             RepairTicketId = ticketId,
             IssuedAt = issuedAt,
-            DueAt = dueAt.HasValue ? DateTime.SpecifyKind(dueAt.Value, DateTimeKind.Utc) : issuedAt.AddDays(30),
+            DueAt = Gmt7Clock.ToUtcMidnight(dueDate),
             DiscountPercent = discountPercent,
             TaxPercent = taxPercent,
             Notes = Normalize(notes)
@@ -84,8 +87,8 @@ public class BillingService(IBillingRepository repository) : IBillingService
         {
             WarrantyCode = $"WAR-{Guid.NewGuid():N}"[..20].ToUpperInvariant(),
             RepairTicketId = ticketId,
-            StartDate = DateTime.UtcNow.Date,
-            EndDate = DateTime.UtcNow.Date,
+            StartDate = Gmt7Clock.ToUtcMidnight(Gmt7Clock.Today),
+            EndDate = Gmt7Clock.ToUtcMidnight(Gmt7Clock.Today),
             Status = WarrantyStatus.Active
         };
         var error = await repository.CreateWarrantyAsync(warranty);

@@ -69,7 +69,8 @@ public class WarrantyWorkflowRepository(RepairCenterDbContext db) : IWarrantyWor
         if (!await IsActiveUserAsync(claim.RequestedByUserId)) return await Rollback(tx, WarrantyWorkflowError.InvalidActor);
         var warranty = await db.Warranties.FirstOrDefaultAsync(x => x.Id == claim.WarrantyId);
         if (warranty is null) return await Rollback(tx, WarrantyWorkflowError.WarrantyNotFound);
-        if (warranty.Status == WarrantyStatus.Active && warranty.EndDate.Date < DateTime.UtcNow.Date)
+        if (warranty.Status == WarrantyStatus.Active &&
+            DateOnly.FromDateTime(warranty.EndDate) < Gmt7Clock.Today)
         {
             warranty.Status = WarrantyStatus.Expired;
             await db.SaveChangesAsync();
@@ -84,7 +85,9 @@ public class WarrantyWorkflowRepository(RepairCenterDbContext db) : IWarrantyWor
         if (detail is null) return await Rollback(tx, WarrantyWorkflowError.ItemNotFound);
         if (!detail.WarrantyStartDate.HasValue || !detail.WarrantyEndDate.HasValue || detail.WarrantyDuration <= 0)
             return await Rollback(tx, WarrantyWorkflowError.ItemNotCovered);
-        if (detail.WarrantyStartDate.Value.Date > claim.SubmittedAt.Date || detail.WarrantyEndDate.Value.Date < claim.SubmittedAt.Date)
+        var submittedDate = Gmt7Clock.FromUtc(claim.SubmittedAt);
+        if (DateOnly.FromDateTime(detail.WarrantyStartDate.Value) > submittedDate ||
+            DateOnly.FromDateTime(detail.WarrantyEndDate.Value) < submittedDate)
             return await Rollback(tx, WarrantyWorkflowError.ItemWarrantyExpired);
         if (await db.WarrantyClaims.AnyAsync(x => x.WarrantyId == claim.WarrantyId &&
                 x.RepairTicketDetailId == detail.Id &&
@@ -183,14 +186,18 @@ public class WarrantyWorkflowRepository(RepairCenterDbContext db) : IWarrantyWor
                 return await Rollback(tx, WarrantyWorkflowError.WarrantyNotActive);
             if (!detail.WarrantyStartDate.HasValue || !detail.WarrantyEndDate.HasValue || detail.WarrantyDuration <= 0)
                 return await Rollback(tx, WarrantyWorkflowError.ItemNotCovered);
-            if (detail.WarrantyStartDate.Value.Date > claim.SubmittedAt.Date || detail.WarrantyEndDate.Value.Date < claim.SubmittedAt.Date)
+            var submittedDate = Gmt7Clock.FromUtc(claim.SubmittedAt);
+            if (DateOnly.FromDateTime(detail.WarrantyStartDate.Value) > submittedDate ||
+                DateOnly.FromDateTime(detail.WarrantyEndDate.Value) < submittedDate)
                 return await Rollback(tx, WarrantyWorkflowError.ItemWarrantyExpired);
         }
         else if (status == WarrantyClaimStatus.Approved)
         {
             if (claim.Warranty.Status == WarrantyStatus.Voided)
                 return await Rollback(tx, WarrantyWorkflowError.WarrantyNotActive);
-            if (claim.Warranty.StartDate.Date > claim.SubmittedAt.Date || claim.Warranty.EndDate.Date < claim.SubmittedAt.Date)
+            var submittedDate = Gmt7Clock.FromUtc(claim.SubmittedAt);
+            if (DateOnly.FromDateTime(claim.Warranty.StartDate) > submittedDate ||
+                DateOnly.FromDateTime(claim.Warranty.EndDate) < submittedDate)
                 return await Rollback(tx, WarrantyWorkflowError.WarrantyExpired);
         }
 
@@ -251,7 +258,7 @@ public class WarrantyWorkflowRepository(RepairCenterDbContext db) : IWarrantyWor
         if (warranty is null) return await Rollback(tx, WarrantyWorkflowError.WarrantyNotFound);
         if (warranty.Status != WarrantyStatus.Active) return await Rollback(tx, WarrantyWorkflowError.WarrantyNotActive);
         var now = DateTime.UtcNow;
-        if (warranty.EndDate.Date < now.Date)
+        if (DateOnly.FromDateTime(warranty.EndDate) < Gmt7Clock.FromUtc(now))
         {
             warranty.Status = WarrantyStatus.Expired;
             await db.SaveChangesAsync();
@@ -285,9 +292,13 @@ public class WarrantyWorkflowRepository(RepairCenterDbContext db) : IWarrantyWor
     private static bool IsCoveredAtSubmission(WarrantyClaim claim)
     {
         var detail = claim.RepairTicketDetail;
-        return detail is not null && detail.WarrantyStartDate.HasValue && detail.WarrantyEndDate.HasValue &&
-            detail.WarrantyDuration > 0 && detail.WarrantyStartDate.Value.Date <= claim.SubmittedAt.Date &&
-            detail.WarrantyEndDate.Value.Date >= claim.SubmittedAt.Date;
+        if (detail is null || !detail.WarrantyStartDate.HasValue || !detail.WarrantyEndDate.HasValue ||
+            detail.WarrantyDuration <= 0)
+            return false;
+
+        var submittedDate = Gmt7Clock.FromUtc(claim.SubmittedAt);
+        return DateOnly.FromDateTime(detail.WarrantyStartDate.Value) <= submittedDate &&
+            DateOnly.FromDateTime(detail.WarrantyEndDate.Value) >= submittedDate;
     }
     private static async Task<WarrantyWorkflowError> Rollback(Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction tx, WarrantyWorkflowError error)
     {

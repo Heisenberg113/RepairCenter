@@ -9,7 +9,7 @@ public class InvoiceResponse
     public int RepairTicketId { get; set; }
     public string TicketNumber { get; set; } = string.Empty;
     public DateTime IssuedAt { get; set; }
-    public DateTime? DueAt { get; set; }
+    public DateOnly? DueAt { get; set; }
     public decimal Subtotal { get; set; }
     public decimal DiscountPercent { get; set; }
     public decimal DiscountAmount { get; set; }

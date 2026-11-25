@@ -1,4 +1,5 @@
 using RepairCenter.Services.Interfaces;
+using RepairCenter.Utilities;
 
 namespace RepairCenter.Services;
 
@@ -23,7 +24,8 @@ public sealed class InvoiceOverdueBackgroundService(
             var updated = await billing.MarkOverdueInvoicesAsync(DateTime.UtcNow);
             if (updated > 0) logger.LogInformation("Marked {InvoiceCount} invoices as overdue.", updated);
             var warrantyWorkflow = scope.ServiceProvider.GetRequiredService<IWarrantyWorkflowService>();
-            var expired = await warrantyWorkflow.MarkExpiredWarrantiesAsync(DateTime.UtcNow.Date);
+            var expired = await warrantyWorkflow.MarkExpiredWarrantiesAsync(
+                Gmt7Clock.ToUtcMidnight(Gmt7Clock.Today));
             if (expired > 0) logger.LogInformation("Marked {WarrantyCount} warranties as expired.", expired);
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)

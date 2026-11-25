@@ -18,6 +18,6 @@ public class RepairTicketDetailResponse
     public int WarrantyDuration { get; set; }
     public WarrantyDurationUnit WarrantyDurationUnit { get; set; }
     public string? WarrantyTerms { get; set; }
-    public DateTime? WarrantyStartDate { get; set; }
-    public DateTime? WarrantyEndDate { get; set; }
+    public DateOnly? WarrantyStartDate { get; set; }
+    public DateOnly? WarrantyEndDate { get; set; }
 }

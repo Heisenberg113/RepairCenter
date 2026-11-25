@@ -5,6 +5,7 @@ using RepairCenter.Entities;
 using RepairCenter.Enums;
 using RepairCenter.Contracts;
 using RepairCenter.Services.Interfaces;
+using RepairCenter.Utilities;
 using System.Security.Claims;
 
 namespace RepairCenter.Controllers;
@@ -197,29 +198,39 @@ public class WarrantiesController(IBillingService service, IWarrantyWorkflowServ
         Status = claim.Status, SubmittedAt = claim.SubmittedAt, ResolvedAt = claim.ResolvedAt
     };
 
-    private static WarrantyResponse ToResponse(Warranty warranty) => new()
+    private static WarrantyResponse ToResponse(Warranty warranty)
     {
-        Id = warranty.Id, WarrantyCode = warranty.WarrantyCode,
-        RepairTicketId = warranty.RepairTicketId, TicketNumber = warranty.RepairTicket.TicketNumber,
-        CustomerName = warranty.RepairTicket.Customer.Name,
-        CustomerPhoneNumber = warranty.RepairTicket.Customer.PhoneNumber,
-        StartDate = warranty.StartDate, EndDate = warranty.EndDate,
-        Status = warranty.Status,
-        Terms = warranty.Terms, VoidReason = warranty.VoidReason,
-        VoidedAt = warranty.VoidedAt, VoidedByUserId = warranty.VoidedByUserId,
-        Items = warranty.RepairTicket.Details.Select(detail => new WarrantyItemResponse
+        var today = Gmt7Clock.Today;
+        return new WarrantyResponse
         {
-            RepairTicketDetailId = detail.Id,
-            ItemType = detail.RepairServiceId.HasValue ? "Service" : "SparePart",
-            Description = detail.Description,
-            WarrantyDuration = detail.WarrantyDuration,
-            WarrantyDurationUnit = detail.WarrantyDurationUnit,
-            StartDate = detail.WarrantyStartDate,
-            EndDate = detail.WarrantyEndDate,
-            IsInWarranty = warranty.Status == WarrantyStatus.Active && detail.WarrantyStartDate.HasValue &&
-                detail.WarrantyEndDate.HasValue && detail.WarrantyStartDate.Value.Date <= DateTime.UtcNow.Date &&
-                detail.WarrantyEndDate.Value.Date >= DateTime.UtcNow.Date,
-            Terms = detail.WarrantyTerms
-        }).ToList()
-    };
+            Id = warranty.Id, WarrantyCode = warranty.WarrantyCode,
+            RepairTicketId = warranty.RepairTicketId, TicketNumber = warranty.RepairTicket.TicketNumber,
+            CustomerName = warranty.RepairTicket.Customer.Name,
+            CustomerPhoneNumber = warranty.RepairTicket.Customer.PhoneNumber,
+            StartDate = DateOnly.FromDateTime(warranty.StartDate),
+            EndDate = DateOnly.FromDateTime(warranty.EndDate),
+            Status = warranty.Status,
+            Terms = warranty.Terms, VoidReason = warranty.VoidReason,
+            VoidedAt = warranty.VoidedAt, VoidedByUserId = warranty.VoidedByUserId,
+            Items = warranty.RepairTicket.Details.Select(detail => new WarrantyItemResponse
+            {
+                RepairTicketDetailId = detail.Id,
+                ItemType = detail.RepairServiceId.HasValue ? "Service" : "SparePart",
+                Description = detail.Description,
+                WarrantyDuration = detail.WarrantyDuration,
+                WarrantyDurationUnit = detail.WarrantyDurationUnit,
+                StartDate = detail.WarrantyStartDate.HasValue
+                    ? DateOnly.FromDateTime(detail.WarrantyStartDate.Value)
+                    : null,
+                EndDate = detail.WarrantyEndDate.HasValue
+                    ? DateOnly.FromDateTime(detail.WarrantyEndDate.Value)
+                    : null,
+                IsInWarranty = warranty.Status == WarrantyStatus.Active && detail.WarrantyStartDate.HasValue &&
+                    detail.WarrantyEndDate.HasValue &&
+                    DateOnly.FromDateTime(detail.WarrantyStartDate.Value) <= today &&
+                    DateOnly.FromDateTime(detail.WarrantyEndDate.Value) >= today,
+                Terms = detail.WarrantyTerms
+            }).ToList()
+        };
+    }
 }

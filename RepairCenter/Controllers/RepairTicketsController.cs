@@ -26,6 +26,7 @@ public class RepairTicketsController(
         [FromQuery] DateTime? receivedFrom,
         [FromQuery] DateTime? receivedTo,
         [FromQuery] string? search,
+        [FromQuery] bool oldestFirst = false,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
@@ -41,7 +42,7 @@ public class RepairTicketsController(
             technicianUserId = userId;
         }
         var result = await service.GetAllAsync(page, pageSize, customerId, deviceId, technicianId,
-            technicianUserId, status, receivedFrom, receivedTo, search);
+            technicianUserId, status, receivedFrom, receivedTo, search, oldestFirst);
         return Ok(new PagedRepairTicketResponse
         {
             Items = result.Items.Select(ToResponse),
@@ -307,6 +308,7 @@ public class RepairTicketsController(
     {
         RepairTicketDetailError.RepairTicketNotFound => NotFound(new ProblemDetails { Title = "Không tìm thấy phiếu sửa chữa." }),
         RepairTicketDetailError.RepairServiceNotFoundOrInactive => NotFound(new ProblemDetails { Title = "Không tìm thấy dịch vụ hoặc dịch vụ đã ngừng hoạt động." }),
+        RepairTicketDetailError.DeviceTypeMismatch => Conflict(new ProblemDetails { Title = "Loại dịch vụ hoặc phụ tùng không khớp với loại thiết bị của phiếu." }),
         RepairTicketDetailError.SparePartNotFound => NotFound(new ProblemDetails { Title = "Không tìm thấy phụ tùng." }),
         RepairTicketDetailError.SparePartInactive => Conflict(new ProblemDetails { Title = "Phụ tùng đã ngừng hoạt động, không thể tăng số lượng trên phiếu." }),
         RepairTicketDetailError.RepairTicketClosed => Conflict(new ProblemDetails { Title = "Phiếu đã đóng, không thể thêm dịch vụ hoặc phụ tùng." }),
@@ -336,8 +338,12 @@ public class RepairTicketsController(
         WarrantyDuration = detail.WarrantyDuration,
         WarrantyDurationUnit = detail.WarrantyDurationUnit,
         WarrantyTerms = detail.WarrantyTerms,
-        WarrantyStartDate = detail.WarrantyStartDate,
-        WarrantyEndDate = detail.WarrantyEndDate
+        WarrantyStartDate = detail.WarrantyStartDate.HasValue
+            ? DateOnly.FromDateTime(detail.WarrantyStartDate.Value)
+            : null,
+        WarrantyEndDate = detail.WarrantyEndDate.HasValue
+            ? DateOnly.FromDateTime(detail.WarrantyEndDate.Value)
+            : null
     };
 
     private static RepairTicketResponse ToResponse(RepairTicket ticket) => new()

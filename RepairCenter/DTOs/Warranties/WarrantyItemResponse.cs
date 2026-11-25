@@ -9,8 +9,8 @@ public sealed class WarrantyItemResponse
     public string Description { get; set; } = string.Empty;
     public int WarrantyDuration { get; set; }
     public WarrantyDurationUnit WarrantyDurationUnit { get; set; }
-    public DateTime? StartDate { get; set; }
-    public DateTime? EndDate { get; set; }
+    public DateOnly? StartDate { get; set; }
+    public DateOnly? EndDate { get; set; }
     public bool IsInWarranty { get; set; }
     public string? Terms { get; set; }
 }

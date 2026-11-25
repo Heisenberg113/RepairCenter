@@ -12,7 +12,7 @@ public class RepairTicketRepository(RepairCenterDbContext context) : IRepairTick
     public async Task<PagedRepairTicketResult<RepairTicket>> GetAllAsync(
         int page, int pageSize, int? customerId, int? deviceId, int? technicianId,
         int? technicianUserId, RepairCenter.Enums.RepairStatus? status,
-        DateTime? receivedFrom, DateTime? receivedTo, string? search)
+        DateTime? receivedFrom, DateTime? receivedTo, string? search, bool oldestFirst)
     {
         var query = context.RepairTickets
             .AsNoTracking()
@@ -59,8 +59,10 @@ public class RepairTicketRepository(RepairCenterDbContext context) : IRepairTick
         var activeCount = await query.CountAsync(ticket =>
             ticket.Status != RepairCenter.Enums.RepairStatus.Delivered &&
             ticket.Status != RepairCenter.Enums.RepairStatus.Cancelled);
-        var items = await query.OrderByDescending(ticket => ticket.ReceivedAt)
-            .ThenByDescending(ticket => ticket.Id)
+        var ordered = oldestFirst
+            ? query.OrderBy(ticket => ticket.ReceivedAt).ThenBy(ticket => ticket.Id)
+            : query.OrderByDescending(ticket => ticket.ReceivedAt).ThenByDescending(ticket => ticket.Id);
+        var items = await ordered
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();

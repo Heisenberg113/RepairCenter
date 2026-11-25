@@ -20,3 +20,19 @@
 
 .ticket-date-filter{display:flex;align-items:center;gap:7px;white-space:nowrap;color:var(--muted);font-size:11px;font-weight:600}.ticket-date-filter input{width:auto;min-width:145px;padding:8px 9px}
 @media(max-width:700px){.ticket-date-filter{width:100%;justify-content:space-between}.ticket-date-filter input{flex:1}}
+
+.toolbar .filter-select{width:auto;min-width:155px;max-width:220px}
+@media(max-width:700px){.toolbar .filter-select{flex:1;min-width:calc(50% - 6px);max-width:none}}
+
+.list-filter-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line)}
+.list-filter-bar .search{flex:1;min-width:180px}
+.list-filter-bar .filter-select{width:auto;min-width:190px;max-width:260px}
+@media(max-width:700px){.list-filter-bar .search,.list-filter-bar .filter-select{width:100%;max-width:none}}
+
+.table-sort{border:0;background:transparent;color:inherit;font:inherit;font-weight:700;letter-spacing:inherit;text-transform:inherit;padding:0}
+.table-sort:hover{color:var(--blue)}
+.table-pagination{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--line);font-size:11px}
+@media(max-width:700px){.table-pagination{align-items:flex-start;flex-direction:column}}
+
+.nav-count{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;min-width:20px;height:20px;margin-left:auto;padding:0 6px;border-radius:999px;background:#d64d59;color:#fff;font-size:10px;font-weight:800;line-height:1}
+.nav-count.failed{background:#b9770e}

@@ -22,10 +22,56 @@ const pageMeta = {
 
 function Navigation(){
   const [page,setPage]=React.useState('overview');
-  const [,setAuthVersion]=React.useState(0);
-  React.useEffect(()=>{const onRoute=e=>setPage(e.detail?.page||'overview'),onAuth=()=>setAuthVersion(v=>v+1);window.addEventListener('repair-center-navigate',onRoute);window.addEventListener('repair-center-auth',onAuth);return()=>{window.removeEventListener('repair-center-navigate',onRoute);window.removeEventListener('repair-center-auth',onAuth)}},[]);
+  const [authVersion,setAuthVersion]=React.useState(0);
+  const [notifications,setNotifications]=React.useState({counts:{},errors:{}});
+  React.useEffect(()=>{
+    let cancelled=false,requestId=0;
+    const refreshNotifications=async()=>{
+      const currentRequest=++requestId,bridge=window.repairCenterBridge;
+      if(!bridge?.token){setNotifications({counts:{},errors:{}});return}
+      const counts={},errors={},tasks=[];
+      const load=async(keys,action)=>{try{await action()}catch{keys.forEach(key=>{errors[key]=true})}};
+      if(bridge.can('Admin','Receptionist'))
+        tasks.push(load(['tickets'],async()=>{const result=await bridge.api('/api/repair-tickets?page=1&pageSize=1&status=3');counts.tickets=result.totalCount}));
+      if(bridge.can('Admin','Receptionist','Technician'))
+        tasks.push(load(['services','inventory'],async()=>{
+          const requests=await bridge.api('/api/catalog-change-requests');
+          const pending=requests.filter(request=>request.status==='Pending');
+          counts.services=pending.filter(request=>request.itemType==='RepairService').length;
+          counts.inventory=pending.filter(request=>request.itemType==='SparePart').length;
+        }));
+      if(bridge.can('Admin','Receptionist','Technician'))
+        tasks.push(load(['warranties'],async()=>{counts.warranties=(await bridge.api('/api/warranties/claims/pending')).length}));
+      await Promise.all(tasks);
+      if(!cancelled&&currentRequest===requestId)setNotifications({counts,errors});
+    };
+    const onRoute=event=>{setPage(event.detail?.page||'overview');refreshNotifications()};
+    const eventNames=['repair-center-notifications-changed','repair-tickets-changed'];
+    const onChange=()=>refreshNotifications(),onAuth=()=>setAuthVersion(v=>v+1);
+    refreshNotifications();
+    const timer=setInterval(refreshNotifications,60000);
+    window.addEventListener('repair-center-navigate',onRoute);
+    window.addEventListener('repair-center-auth',onAuth);
+    window.addEventListener('repair-center-auth-state',onAuth);
+    eventNames.forEach(name=>window.addEventListener(name,onChange));
+    return()=>{
+      cancelled=true;clearInterval(timer);
+      window.removeEventListener('repair-center-navigate',onRoute);
+      window.removeEventListener('repair-center-auth',onAuth);
+      window.removeEventListener('repair-center-auth-state',onAuth);
+      eventNames.forEach(name=>window.removeEventListener(name,onChange));
+    };
+  },[authVersion]);
   const items=[['overview',true],['tickets',window.repairCenterBridge?.can('Admin','Receptionist','Technician')],['customers',window.repairCenterBridge?.can('Admin','Receptionist')],['deviceTypes',window.repairCenterBridge?.can('Admin','Receptionist')],['services',window.repairCenterBridge?.can('Admin','Receptionist','Technician')],['technicians',window.repairCenterBridge?.can('Admin','Receptionist')],['inventory',window.repairCenterBridge?.can('Admin','Receptionist','Technician')],['billing',window.repairCenterBridge?.can('Admin','Receptionist')],['warranties',window.repairCenterBridge?.can('Admin','Receptionist','Technician')],['accounts',window.repairCenterBridge?.can('Admin')]];
-  return h('nav',null,items.filter(([,allowed])=>allowed).map(([key])=>h('button',{key,className:`nav-item ${page===key?'active':''}`,onClick:()=>window.navigate(key)},h('span',{className:'nav-icon'},pageMeta[key][2]),pageMeta[key][1])));
+  const notificationLabels={tickets:'phiếu chờ duyệt',services:'yêu cầu dịch vụ chờ duyệt',inventory:'yêu cầu phụ tùng chờ duyệt',warranties:'yêu cầu bảo hành đang xử lý'};
+  const notificationFor=key=>{
+    const count=notifications.counts[key],failed=notifications.errors[key];
+    if(failed)return h('span',{className:'nav-count failed',title:`Không tải được số lượng ${notificationLabels[key]||'yêu cầu'}`,'aria-label':'Không tải được số lượng yêu cầu'},'!');
+    if(!count)return null;
+    const label=`${count} ${notificationLabels[key]||'yêu cầu đang chờ'}`;
+    return h('span',{className:'nav-count',title:label,'aria-label':label},count>99?'99+':count);
+  };
+  return h('nav',null,items.filter(([,allowed])=>allowed).map(([key])=>h('button',{key,className:`nav-item ${page===key?'active':''}`,onClick:()=>window.navigate(key)},h('span',{className:'nav-icon'},pageMeta[key][2]),pageMeta[key][1],notificationFor(key))));
 }
 function PageHeading(){
   const [page,setPage]=React.useState('overview');
@@ -87,7 +133,7 @@ function AppShell() {
       h('main', { className: 'main' },
         h('header', { className: 'topbar' },
           h(PageHeading),
-          h('div', { className: 'top-actions' }, h('span', { className: 'today' }, new Intl.DateTimeFormat('vi-VN',{weekday:'long',day:'numeric',month:'long'}).format(new Date())),
+          h('div', { className: 'top-actions' }, h('span', { className: 'today' }, new Intl.DateTimeFormat('vi-VN',{weekday:'long',day:'numeric',month:'long',timeZone:'Asia/Ho_Chi_Minh'}).format(new Date())),
             h('button', { className: `button primary ${window.repairCenterBridge?.can('Admin','Receptionist')?'':'hidden'}`, onClick:()=>window.repairCenterBridge?.openIntake() }, '＋ Tiếp nhận phiếu'))),
         h('div', { id: 'notice', className: 'notice hidden' }),
         h('section', { id: 'content' }))),

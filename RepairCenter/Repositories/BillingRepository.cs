@@ -5,12 +5,14 @@ using RepairCenter.Entities;
 using RepairCenter.Enums;
 using RepairCenter.Repositories.Interfaces;
 using RepairCenter.Contracts;
+using RepairCenter.Utilities;
 
 namespace RepairCenter.Repositories;
 
 public class BillingRepository(RepairCenterDbContext context) : IBillingRepository
 {
-    public async Task<PagedResult<BillingListRow>> GetBillingRowsAsync(int page, int pageSize, string? search)
+    public async Task<PagedResult<BillingListRow>> GetBillingRowsAsync(
+        int page, int pageSize, string? search, BillingListStatus? status, bool dueDateDescending)
     {
         var tickets = context.RepairTickets.AsNoTracking()
             .Where(x => x.Status == RepairStatus.Completed || x.Status == RepairStatus.Delivered);
@@ -24,22 +26,45 @@ public class BillingRepository(RepairCenterDbContext context) : IBillingReposito
                 x.Device.Model.Contains(term));
         }
 
-        var totalCount = await tickets.CountAsync();
-        var rows = await (
-            from ticket in tickets
+        var joined = from ticket in tickets
             join invoice in context.Invoices.AsNoTracking()
                 on ticket.Id equals invoice.RepairTicketId into ticketInvoices
             from invoice in ticketInvoices.DefaultIfEmpty()
-            orderby (ticket.CompletedAt ?? ticket.DeliveredAt ?? ticket.ReceivedAt) descending, ticket.Id descending
-            select new BillingListRow(
-                ticket.Id,
-                ticket.TicketNumber,
-                ticket.Customer.Name,
-                ticket.Device.Brand,
-                ticket.Device.Model,
-                invoice == null ? null : invoice.Id,
-                invoice == null ? null : invoice.InvoiceNumber,
-                invoice == null ? null : invoice.PaymentStatus))
+            select new { Ticket = ticket, Invoice = invoice };
+
+        joined = status switch
+        {
+            BillingListStatus.NoInvoice => joined.Where(x => x.Invoice == null),
+            BillingListStatus.Pending => joined.Where(x => x.Invoice != null && x.Invoice.PaymentStatus == PaymentStatus.Pending),
+            BillingListStatus.PartiallyPaid => joined.Where(x => x.Invoice != null && x.Invoice.PaymentStatus == PaymentStatus.PartiallyPaid),
+            BillingListStatus.Paid => joined.Where(x => x.Invoice != null && x.Invoice.PaymentStatus == PaymentStatus.Paid),
+            BillingListStatus.Refunded => joined.Where(x => x.Invoice != null && x.Invoice.PaymentStatus == PaymentStatus.Refunded),
+            BillingListStatus.Overdue => joined.Where(x => x.Invoice != null && x.Invoice.PaymentStatus == PaymentStatus.Overdue),
+            _ => joined
+        };
+
+        var totalCount = await joined.CountAsync();
+        var ordered = dueDateDescending
+            ? joined.OrderBy(x => x.Invoice == null || !x.Invoice.DueAt.HasValue)
+                .ThenByDescending(x => x.Invoice!.DueAt)
+                .ThenByDescending(x => x.Ticket.CompletedAt ?? x.Ticket.DeliveredAt ?? x.Ticket.ReceivedAt)
+                .ThenByDescending(x => x.Ticket.Id)
+            : joined.OrderBy(x => x.Invoice == null || !x.Invoice.DueAt.HasValue)
+                .ThenBy(x => x.Invoice!.DueAt)
+                .ThenByDescending(x => x.Ticket.CompletedAt ?? x.Ticket.DeliveredAt ?? x.Ticket.ReceivedAt)
+                .ThenByDescending(x => x.Ticket.Id);
+        var rows = await ordered
+            .Select(x => new BillingListRow(
+                x.Ticket.Id,
+                x.Ticket.TicketNumber,
+                x.Ticket.Customer.Name,
+                x.Ticket.Device.Brand,
+                x.Ticket.Device.Model,
+                x.Invoice == null ? null : x.Invoice.Id,
+                x.Invoice == null ? null : x.Invoice.InvoiceNumber,
+                x.Invoice == null ? null : x.Invoice.PaymentStatus,
+                x.Invoice == null ? null : x.Invoice.TotalAmount - x.Invoice.AmountPaid,
+                x.Invoice == null ? null : x.Invoice.DueAt))
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -81,7 +106,8 @@ public class BillingRepository(RepairCenterDbContext context) : IBillingReposito
             invoice.PaymentStatus = PaymentStatus.Paid;
             invoice.PaidAt = invoice.IssuedAt;
         }
-        else if (invoice.DueAt <= DateTime.UtcNow)
+        else if (invoice.DueAt.HasValue &&
+                 DateOnly.FromDateTime(invoice.DueAt.Value) < Gmt7Clock.Today)
         {
             invoice.PaymentStatus = PaymentStatus.Overdue;
         }
@@ -156,8 +182,10 @@ public class BillingRepository(RepairCenterDbContext context) : IBillingReposito
 
     public async Task<int> MarkOverdueInvoicesAsync(DateTime now)
     {
+        var startOfToday = Gmt7Clock.ToUtcMidnight(Gmt7Clock.FromUtc(now));
         return await context.Invoices
-            .Where(invoice => invoice.DueAt.HasValue && invoice.DueAt <= now && invoice.TotalAmount > invoice.AmountPaid &&
+            .Where(invoice => invoice.DueAt.HasValue && invoice.DueAt < startOfToday &&
+                invoice.TotalAmount > invoice.AmountPaid &&
                 (invoice.PaymentStatus == PaymentStatus.Pending || invoice.PaymentStatus == PaymentStatus.PartiallyPaid))
             .ExecuteUpdateAsync(update => update.SetProperty(invoice => invoice.PaymentStatus, PaymentStatus.Overdue));
     }
@@ -169,7 +197,8 @@ public class BillingRepository(RepairCenterDbContext context) : IBillingReposito
     private static PaymentStatus GetPaymentStatus(Invoice invoice)
     {
         if (invoice.AmountPaid >= invoice.TotalAmount) return PaymentStatus.Paid;
-        if (invoice.DueAt.HasValue && invoice.DueAt.Value <= DateTime.UtcNow)
+        if (invoice.DueAt.HasValue &&
+            DateOnly.FromDateTime(invoice.DueAt.Value) < Gmt7Clock.Today)
             return PaymentStatus.Overdue;
         return invoice.AmountPaid > 0 ? PaymentStatus.PartiallyPaid : PaymentStatus.Pending;
     }
@@ -193,7 +222,10 @@ public class BillingRepository(RepairCenterDbContext context) : IBillingReposito
         if (ticket.Status != RepairStatus.Delivered) return await Rollback(tx, BillingError.TicketNotDelivered);
         if (await context.Warranties.AnyAsync(x => x.RepairTicketId == ticket.Id))
             return await Rollback(tx, BillingError.WarrantyAlreadyExists);
-        var today = ticket.DeliveredAt?.Date ?? DateTime.UtcNow.Date;
+        var today = ticket.DeliveredAt.HasValue
+            ? Gmt7Clock.FromUtc(ticket.DeliveredAt.Value)
+            : Gmt7Clock.Today;
+        var todayUtc = Gmt7Clock.ToUtcMidnight(today);
         var coveredDetails = ticket.Details.Where(x => x.WarrantyDuration > 0).ToList();
         if (coveredDetails.Count == 0) return await Rollback(tx, BillingError.NoWarrantyCoverage);
         if (coveredDetails.Any(detail => detail.WarrantyDurationUnit switch
@@ -204,12 +236,12 @@ public class BillingRepository(RepairCenterDbContext context) : IBillingReposito
             })) return await Rollback(tx, BillingError.InvalidWarrantyPolicy);
         foreach (var detail in coveredDetails)
         {
-            detail.WarrantyStartDate = today;
+            detail.WarrantyStartDate = todayUtc;
             detail.WarrantyEndDate = detail.WarrantyDurationUnit == WarrantyDurationUnit.Months
-                ? today.AddMonths(detail.WarrantyDuration)
-                : today.AddDays(detail.WarrantyDuration);
+                ? todayUtc.AddMonths(detail.WarrantyDuration)
+                : todayUtc.AddDays(detail.WarrantyDuration);
         }
-        warranty.StartDate = today;
+        warranty.StartDate = todayUtc;
         warranty.EndDate = coveredDetails.Max(x => x.WarrantyEndDate!.Value);
         await context.Warranties.AddAsync(warranty);
         await context.SaveChangesAsync();

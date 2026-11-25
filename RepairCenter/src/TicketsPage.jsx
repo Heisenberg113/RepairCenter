@@ -2,11 +2,16 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import StatusBadge from './StatusBadge.jsx';
 
 const b = () => window.repairCenterBridge;
+const gmt7DayStartUtc = (value, daysToAdd = 0) => {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + daysToAdd) - 7 * 60 * 60 * 1000).toISOString();
+};
 
 export default function TicketsPage() {
   const [rows, setRows] = useState([]);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
+  const [oldestFirst, setOldestFirst] = useState(false);
   const [receivedFrom, setReceivedFrom] = useState('');
   const [receivedTo, setReceivedTo] = useState('');
   const [page, setPage] = useState(1);
@@ -24,12 +29,9 @@ export default function TicketsPage() {
       const params = new URLSearchParams({ page, pageSize });
       if (query.trim()) params.set('search', query.trim());
       if (status) params.set('status', status);
-      if (receivedFrom) params.set('receivedFrom', `${receivedFrom}T00:00:00Z`);
-      if (receivedTo) {
-        const end = new Date(`${receivedTo}T00:00:00Z`);
-        end.setUTCDate(end.getUTCDate() + 1);
-        params.set('receivedTo', end.toISOString());
-      }
+      if (oldestFirst) params.set('oldestFirst', 'true');
+      if (receivedFrom) params.set('receivedFrom', gmt7DayStartUtc(receivedFrom));
+      if (receivedTo) params.set('receivedTo', gmt7DayStartUtc(receivedTo, 1));
       const result = await b().api(`/api/repair-tickets?${params}`);
       if (currentRequest !== requestId.current) return;
       const lastPage = Math.max(1, Math.ceil(result.totalCount / pageSize));
@@ -46,7 +48,7 @@ export default function TicketsPage() {
       if (currentRequest === requestId.current)
         setLoading(false);
     }
-  }, [page, pageSize, query, receivedFrom, receivedTo, status]);
+  }, [page, pageSize, query, receivedFrom, receivedTo, status, oldestFirst]);
 
   useEffect(() => {
     refresh();
@@ -79,6 +81,10 @@ export default function TicketsPage() {
         <select value={status} onChange={e => updateFilter(setStatus)(e.target.value)}>
           <option value="">Tất cả trạng thái</option>
           {Object.entries(b().statusLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+        </select>
+        <select aria-label="Sắp xếp theo thời gian tiếp nhận" value={oldestFirst ? 'oldest' : 'newest'} onChange={e => updateFilter(setOldestFirst)(e.target.value === 'oldest')}>
+          <option value="newest">Tiếp nhận: mới nhất trước</option>
+          <option value="oldest">Tiếp nhận: cũ nhất trước</option>
         </select>
         <label className="ticket-date-filter">Tiếp nhận từ<input aria-label="Ngày tiếp nhận từ" type="date" value={receivedFrom} max={receivedTo || undefined} onChange={e => updateFilter(setReceivedFrom)(e.target.value)} /></label>
         <label className="ticket-date-filter">Đến ngày<input aria-label="Ngày tiếp nhận đến" type="date" value={receivedTo} min={receivedFrom || undefined} onChange={e => updateFilter(setReceivedTo)(e.target.value)} /></label>

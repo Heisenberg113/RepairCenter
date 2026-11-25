@@ -1,4 +1,5 @@
 using RepairCenter.Enums;
+using RepairCenter.Utilities;
 
 namespace RepairCenter.DTOs.Warranties;
 
@@ -10,10 +11,17 @@ public class WarrantyResponse
     public string TicketNumber { get; set; } = string.Empty;
     public string CustomerName { get; set; } = string.Empty;
     public string? CustomerPhoneNumber { get; set; }
-    public DateTime StartDate { get; set; }
-    public DateTime EndDate { get; set; }
+    public DateOnly StartDate { get; set; }
+    public DateOnly EndDate { get; set; }
     public WarrantyStatus Status { get; set; }
-    public bool IsInWarranty => Status == WarrantyStatus.Active && StartDate.Date <= DateTime.UtcNow.Date && DateTime.UtcNow.Date <= EndDate.Date;
+    public bool IsInWarranty
+    {
+        get
+        {
+            var today = Gmt7Clock.Today;
+            return Status == WarrantyStatus.Active && StartDate <= today && today <= EndDate;
+        }
+    }
     public string? Terms { get; set; }
     public string? VoidReason { get; set; }
     public DateTime? VoidedAt { get; set; }

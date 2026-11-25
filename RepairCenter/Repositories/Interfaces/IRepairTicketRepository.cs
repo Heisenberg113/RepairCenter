@@ -9,7 +9,7 @@ public interface IRepairTicketRepository
     Task<PagedRepairTicketResult<RepairTicket>> GetAllAsync(
         int page, int pageSize, int? customerId, int? deviceId, int? technicianId,
         int? technicianUserId, RepairCenter.Enums.RepairStatus? status,
-        DateTime? receivedFrom, DateTime? receivedTo, string? search);
+        DateTime? receivedFrom, DateTime? receivedTo, string? search, bool oldestFirst);
     Task<RepairTicket?> GetByIdAsync(int id);
     Task<RepairTicket?> GetByTicketNumberAsync(string ticketNumber);
     Task<RepairTicket?> GetForUpdateAsync(int id);

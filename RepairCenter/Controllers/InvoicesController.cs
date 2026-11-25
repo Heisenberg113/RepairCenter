@@ -17,13 +17,15 @@ public class InvoicesController(IBillingService service) : ControllerBase
     public async Task<ActionResult<PagedBillingListResponse>> GetAll(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
-        [FromQuery] string? search = null)
+        [FromQuery] string? search = null,
+        [FromQuery] BillingListStatus? status = null,
+        [FromQuery] bool dueDateDescending = false)
     {
         if (page < 1 || pageSize is < 1 or > 100 || page > int.MaxValue / pageSize + 1 ||
-            search?.Length > 200)
+            search?.Length > 200 || status.HasValue && !Enum.IsDefined(status.Value))
             return BadRequest(new ProblemDetails { Title = "Tham số phân trang hoặc tìm kiếm không hợp lệ." });
 
-        var result = await service.GetBillingRowsAsync(page, pageSize, search);
+        var result = await service.GetBillingRowsAsync(page, pageSize, search, status, dueDateDescending);
         return Ok(new PagedBillingListResponse
         {
             Items = result.Items.Select(row => new BillingListItemResponse
@@ -38,7 +40,9 @@ public class InvoicesController(IBillingService service) : ControllerBase
                     {
                         Id = row.InvoiceId.Value,
                         InvoiceNumber = row.InvoiceNumber!,
-                        PaymentStatus = row.PaymentStatus!.Value
+                        PaymentStatus = row.PaymentStatus!.Value,
+                        OutstandingAmount = row.OutstandingAmount!.Value,
+                        DueAt = row.DueAt.HasValue ? DateOnly.FromDateTime(row.DueAt.Value) : null
                     }
                     : null
             }).ToList(),
@@ -122,7 +126,9 @@ public class InvoicesController(IBillingService service) : ControllerBase
     {
         Id = invoice.Id, InvoiceNumber = invoice.InvoiceNumber,
         RepairTicketId = invoice.RepairTicketId, TicketNumber = invoice.RepairTicket.TicketNumber,
-        IssuedAt = invoice.IssuedAt, DueAt = invoice.DueAt, Subtotal = invoice.Subtotal,
+        IssuedAt = invoice.IssuedAt,
+        DueAt = invoice.DueAt.HasValue ? DateOnly.FromDateTime(invoice.DueAt.Value) : null,
+        Subtotal = invoice.Subtotal,
         DiscountPercent = invoice.DiscountPercent, DiscountAmount = invoice.DiscountAmount,
         TaxPercent = invoice.TaxPercent, TaxAmount = invoice.TaxAmount, TotalAmount = invoice.TotalAmount, AmountPaid = invoice.AmountPaid,
         PaymentStatus = invoice.PaymentStatus, PaidAt = invoice.PaidAt, Notes = invoice.Notes,
