@@ -11,6 +11,50 @@ namespace RepairCenter.Repositories;
 
 public class BillingRepository(RepairCenterDbContext context) : IBillingRepository
 {
+    public async Task<RevenueReportResult> GetRevenueReportAsync(DateOnly from, DateOnly to)
+    {
+        var fromUtc = Gmt7Clock.ToUtcStartOfDay(from);
+        var toUtc = Gmt7Clock.ToUtcEndOfDay(to);
+        var matchingPayments = context.InvoicePayments.AsNoTracking()
+            .Where(payment => payment.PaidAt >= fromUtc && payment.PaidAt <= toUtc);
+        var aggregates = await matchingPayments
+            .GroupBy(payment => payment.Type)
+            .Select(group => new
+            {
+                Type = group.Key,
+                Amount = group.Sum(payment => payment.Amount),
+                Count = group.Count()
+            })
+            .ToListAsync();
+        var totalPayments = aggregates
+            .Where(group => group.Type == InvoicePaymentType.Payment)
+            .Select(group => group.Amount)
+            .FirstOrDefault();
+        var totalRefunds = aggregates
+            .Where(group => group.Type == InvoicePaymentType.Refund)
+            .Select(group => group.Amount)
+            .FirstOrDefault();
+        var totalCount = aggregates.Sum(group => group.Count);
+        var transactions = await matchingPayments
+            .OrderByDescending(payment => payment.PaidAt)
+            .ThenByDescending(payment => payment.Id)
+            .Select(payment => new RevenueTransactionRow(
+                payment.Id,
+                payment.Invoice.InvoiceNumber,
+                payment.Invoice.RepairTicket.TicketNumber,
+                payment.Invoice.RepairTicket.Customer.Name,
+                payment.Type,
+                payment.Amount,
+                payment.PaymentMethod,
+                payment.ReferenceNumber,
+                payment.PaidAt,
+                payment.ProcessedByUser == null ? null : payment.ProcessedByUser.FullName,
+                payment.Notes))
+            .ToListAsync();
+
+        return new RevenueReportResult(totalPayments, totalRefunds, transactions, totalCount);
+    }
+
     public async Task<PagedResult<BillingListRow>> GetBillingRowsAsync(
         int page, int pageSize, string? search, BillingListStatus? status, bool dueDateDescending)
     {

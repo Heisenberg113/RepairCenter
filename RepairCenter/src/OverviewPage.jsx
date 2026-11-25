@@ -3,9 +3,28 @@ import StatusBadge from './StatusBadge.jsx';
 
 const bridge = () => window.repairCenterBridge;
 
+function getGmt7DateInputValue(date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+const DEFAULT_REVENUE_TO = getGmt7DateInputValue(new Date());
+const DEFAULT_REVENUE_FROM = `${DEFAULT_REVENUE_TO.slice(0, 7)}-01`;
+
 export default function OverviewPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [revenueFrom, setRevenueFrom] = useState(DEFAULT_REVENUE_FROM);
+  const [revenueTo, setRevenueTo] = useState(DEFAULT_REVENUE_TO);
+  const [revenue, setRevenue] = useState(null);
+  const [revenueLoading, setRevenueLoading] = useState(true);
+  const [revenueError, setRevenueError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -29,6 +48,37 @@ export default function OverviewPage() {
     return () => { cancelled = true; window.removeEventListener('repair-tickets-changed', load); };
   }, []);
 
+  useEffect(() => {
+    if (!bridge().can('Admin')) return;
+    if (!revenueFrom || !revenueTo || revenueFrom > revenueTo) {
+      setRevenue(null);
+      setRevenueError('Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc.');
+      setRevenueLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const params = new URLSearchParams({
+      from: revenueFrom,
+      to: revenueTo
+    });
+    setRevenue(null);
+    setRevenueError('');
+    setRevenueLoading(true);
+    bridge().api(`/api/invoices/revenue?${params}`)
+      .then(result => {
+        if (!cancelled) setRevenue(result);
+      })
+      .catch(e => {
+        if (!cancelled) setRevenueError(e.message || 'Không tải được thống kê doanh số.');
+      })
+      .finally(() => {
+        if (!cancelled) setRevenueLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [revenueFrom, revenueTo]);
+
   if (error) return <div className="panel"><strong>Không tải được dữ liệu</strong><p className="muted">{error}</p><button className="button" onClick={() => window.mountOverviewReact()}>Thử lại</button></div>;
   if (!data) return <div className="empty-state">Đang tải tổng quan…</div>;
 
@@ -44,6 +94,36 @@ export default function OverviewPage() {
     <div className="grid stats">{stats.map(([label, value, hint]) => <div className="stat" key={label}>
       <div className="stat-label">{label}</div><div className="stat-value">{value}</div><div className="stat-hint">{hint}</div>
     </div>)}</div>
+    {bridge().can('Admin') && <div className="panel" style={{ marginBottom: 20 }}>
+      <div className="panel-head"><div><h2>Doanh số và giao dịch</h2><p>Thực thu trong khoảng ngày đã chọn, tính bằng tiền thu trừ tiền hoàn.</p></div></div>
+      <div className="toolbar">
+        <label className="ticket-date-filter">Từ ngày<input type="date" aria-label="Doanh số từ ngày" value={revenueFrom} onChange={e => setRevenueFrom(e.target.value)} /></label>
+        <label className="ticket-date-filter">Đến ngày<input type="date" aria-label="Doanh số đến ngày" value={revenueTo} onChange={e => setRevenueTo(e.target.value)} /></label>
+      </div>
+      {revenueError && <p className="field-note">{revenueError}</p>}
+      {revenueLoading ? <div className="empty-state">Đang tải thống kê doanh số…</div> : revenue && <>
+        <div className="grid three-col" style={{ marginBottom: 20 }}>
+          <div className="stat"><div className="stat-label">Đã thu</div><div className="stat-value">{bridge().money(revenue.totalPayments)}</div></div>
+          <div className="stat"><div className="stat-label">Đã hoàn</div><div className="stat-value">{bridge().money(revenue.totalRefunds)}</div></div>
+          <div className="stat"><div className="stat-label">Doanh số thuần</div><div className="stat-value">{bridge().money(revenue.netRevenue)}</div></div>
+        </div>
+        <div className="table-card">
+          <div className="table-head"><h2>Giao dịch · {revenue.totalCount}</h2></div>
+          <div className="table-scroll revenue-transactions-scroll"><table>
+            <thead><tr><th>Phiếu / hóa đơn</th><th>Khách hàng</th><th>Loại</th><th>Số tiền</th><th>Phương thức</th><th>Người ghi nhận</th><th>Thời gian</th></tr></thead>
+            <tbody>{revenue.transactions.length ? revenue.transactions.map(transaction => <tr key={transaction.id}>
+              <td className="primary-cell">{transaction.ticketNumber}<span className="secondary">{transaction.invoiceNumber}</span></td>
+              <td>{transaction.customerName}</td>
+              <td><span className={`badge ${transaction.type === 'Refund' ? 'red' : 'green'}`}>{transaction.type === 'Refund' ? 'Hoàn tiền' : 'Thu tiền'}</span></td>
+              <td>{bridge().money(transaction.type === 'Refund' ? -transaction.amount : transaction.amount)}</td>
+              <td>{transaction.paymentMethod}<span className="secondary">{transaction.referenceNumber || ''}</span></td>
+              <td>{transaction.processedByUserName || '—'}</td>
+              <td>{bridge().date(transaction.paidAt)}</td>
+            </tr>) : <tr><td colSpan="7" className="empty">Không có giao dịch trong khoảng ngày này.</td></tr>}</tbody>
+          </table></div>
+        </div>
+      </>}
+    </div>}
     <div className="grid two-col">
       <div className="table-card">
         <div className="table-head"><h2>Phiếu gần đây</h2><div className="table-tools"><button className="button small soft" onClick={() => window.navigate('tickets')}>Xem tất cả →</button></div></div>

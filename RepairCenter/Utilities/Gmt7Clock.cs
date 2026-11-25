@@ -19,4 +19,10 @@ public static class Gmt7Clock
 
     public static DateTime ToUtcMidnight(DateOnly date) =>
         DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+
+    public static DateTime ToUtcStartOfDay(DateOnly date) =>
+        DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue) - UtcOffset, DateTimeKind.Utc);
+
+    public static DateTime ToUtcEndOfDay(DateOnly date) =>
+        DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MaxValue) - UtcOffset, DateTimeKind.Utc);
 }

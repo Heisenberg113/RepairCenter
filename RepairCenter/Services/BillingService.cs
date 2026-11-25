@@ -13,6 +13,9 @@ public class BillingService(IBillingRepository repository) : IBillingService
         int page, int pageSize, string? search, BillingListStatus? status, bool dueDateDescending) =>
         repository.GetBillingRowsAsync(page, pageSize, search, status, dueDateDescending);
 
+    public Task<RevenueReportResult> GetRevenueReportAsync(DateOnly from, DateOnly to) =>
+        repository.GetRevenueReportAsync(from, to);
+
     public Task<Invoice?> GetInvoiceAsync(int id) => repository.GetInvoiceAsync(id);
     public Task<Invoice?> GetInvoiceByTicketAsync(int ticketId) => repository.GetInvoiceByTicketAsync(ticketId);
     public Task<Warranty?> GetWarrantyByTicketAsync(int ticketId) => repository.GetWarrantyByTicketAsync(ticketId);

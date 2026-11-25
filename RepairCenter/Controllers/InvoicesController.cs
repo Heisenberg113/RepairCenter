@@ -52,6 +52,41 @@ public class InvoicesController(IBillingService service) : ControllerBase
         });
     }
 
+    [HttpGet("revenue")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<RevenueReportResponse>> GetRevenue(
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to)
+    {
+        if (!from.HasValue || !to.HasValue || from.Value > to.Value)
+            return BadRequest(new ProblemDetails { Title = "Khoảng ngày không hợp lệ." });
+
+        var result = await service.GetRevenueReportAsync(from.Value, to.Value);
+        return Ok(new RevenueReportResponse
+        {
+            From = from.Value,
+            To = to.Value,
+            TotalPayments = result.TotalPayments,
+            TotalRefunds = result.TotalRefunds,
+            NetRevenue = result.TotalPayments - result.TotalRefunds,
+            Transactions = result.Transactions.Select(transaction => new RevenueTransactionResponse
+            {
+                Id = transaction.Id,
+                InvoiceNumber = transaction.InvoiceNumber,
+                TicketNumber = transaction.TicketNumber,
+                CustomerName = transaction.CustomerName,
+                Type = transaction.Type.ToString(),
+                Amount = transaction.Amount,
+                PaymentMethod = transaction.PaymentMethod,
+                ReferenceNumber = transaction.ReferenceNumber,
+                PaidAt = transaction.PaidAt,
+                ProcessedByUserName = transaction.ProcessedByUserName,
+                Notes = transaction.Notes
+            }).ToList(),
+            TotalCount = result.TotalCount
+        });
+    }
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<InvoiceResponse>> GetById(int id)
     {
