@@ -5,8 +5,7 @@
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
 
-BEGIN TRY
-    BEGIN TRANSACTION;
+BEGIN TRANSACTION;
 
     IF EXISTS (SELECT 1 FROM dbo.DeviceTypes)
         OR EXISTS (SELECT 1 FROM dbo.Customers)
@@ -26,7 +25,9 @@ BEGIN TRY
         OR EXISTS (SELECT 1 FROM dbo.WarrantyClaims)
         OR EXISTS (SELECT 1 FROM dbo.CatalogChangeRequests)
     BEGIN
-        THROW 51000, 'Demo seed only runs when all operational tables are empty.', 1;
+        ROLLBACK TRANSACTION;
+        RAISERROR('Demo seed only runs when all operational tables are empty.', 16, 1);
+        RETURN;
     END;
 
     DECLARE @AdminUserId int;
@@ -39,7 +40,9 @@ BEGIN TRY
 
     IF @AdminUserId IS NULL
     BEGIN
-        THROW 51001, 'Configure BootstrapAdmin and start the app before running this seed.', 1;
+        ROLLBACK TRANSACTION;
+        RAISERROR('Configure BootstrapAdmin and start the app before running this seed.', 16, 1);
+        RETURN;
     END;
 
     DECLARE @NowUtc datetime2(7) = SYSUTCDATETIME();
@@ -218,7 +221,7 @@ BEGIN TRY
         (@Ticket5Id, 2, 3, @AdminUserId, DATEADD(HOUR, -8, @NowUtc), N'Đã gửi báo giá'),
         (@Ticket5Id, 3, 4, @AdminUserId, DATEADD(HOUR, -7, @NowUtc), N'Khách đồng ý báo giá');
 
-    DECLARE @SnapshotJson nvarchar(20000) =
+    DECLARE @SnapshotJson nvarchar(max) =
         N'[{"detailId":' + CONVERT(nvarchar(20), @Ticket5ServiceDetailId) +
         N',"itemType":"Service","description":"Tablet port cleaning","quantity":1.00,"unitPrice":450000.00,"discountPercent":0.0000,"discountAmount":0.00,"totalAmount":450000.00}]';
     DECLARE @SnapshotHash varchar(64) = UPPER(CONVERT(varchar(64),
@@ -279,8 +282,3 @@ BEGIN TRY
 
     COMMIT TRANSACTION;
     PRINT 'RepairCenter demo seed completed.';
-END TRY
-BEGIN CATCH
-    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-    THROW;
-END CATCH;
