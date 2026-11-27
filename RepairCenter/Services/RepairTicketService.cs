@@ -20,6 +20,8 @@ public class RepairTicketService(
 
     public Task<RepairTicket?> GetByIdAsync(int id) => repository.GetByIdAsync(id);
     public Task<RepairTicket?> GetByTicketNumberAsync(string ticketNumber) => repository.GetByTicketNumberAsync(ticketNumber);
+    public Task<List<RepairTicket>> GetOpenByDeviceAsync(int deviceId) =>
+        repository.GetOpenByDeviceAsync(deviceId);
 
     public async Task<List<RepairTicketStatusHistory>> GetStatusHistoryAsync(int repairTicketId)
     {

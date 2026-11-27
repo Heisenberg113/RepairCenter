@@ -4,7 +4,7 @@ using RepairCenter.Services.Interfaces;
 
 namespace RepairCenter.Services;
 
-public class TechnicianService(ITechnicianRepository repository) : ITechnicianService
+public class TechnicianService(ITechnicianRepository repository, IAccountService accounts) : ITechnicianService
 {
     public Task<List<Technician>> GetAllAsync() => repository.GetAllAsync();
 
@@ -38,6 +38,64 @@ public class TechnicianService(ITechnicianRepository repository) : ITechnicianSe
         return TechnicianOperationResult<Technician>.Success(technician);
     }
 
+    public async Task<TechnicianOperationResult<Technician>> CreateWithAccountAsync(
+        Technician technician,
+        IReadOnlyCollection<int> deviceTypeIds,
+        string userName)
+    {
+        Normalize(technician);
+
+        if (await repository.EmployeeCodeExistsAsync(technician.EmployeeCode))
+            return TechnicianOperationResult<Technician>.Failure(TechnicianOperationError.DuplicateEmployeeCode);
+
+        if (!technician.IsActive)
+            return TechnicianOperationResult<Technician>.Failure(TechnicianOperationError.TechnicianAccountSetupFailed);
+
+        var deviceTypes = await ResolveDeviceTypesAsync(deviceTypeIds);
+        if (deviceTypes is null)
+            return TechnicianOperationResult<Technician>.Failure(TechnicianOperationError.DeviceTypesNotFound);
+
+        await using var transaction = await repository.BeginSerializableTransactionAsync();
+        var user = new User
+        {
+            UserName = userName,
+            FullName = technician.FullName,
+            Email = technician.Email!,
+            PhoneNumber = technician.PhoneNumber,
+            PasswordHash = string.Empty
+        };
+        var accountResult = await accounts.CreateAsync(user, ["Receptionist"]);
+        if (accountResult.Error != AccountError.None)
+        {
+            await transaction.RollbackAsync();
+            return TechnicianOperationResult<Technician>.Failure(
+                accountResult.Error == AccountError.DuplicateIdentity
+                    ? TechnicianOperationError.DuplicateAccountIdentity
+                    : TechnicianOperationError.TechnicianAccountSetupFailed);
+        }
+
+        technician.UserId = user.Id;
+        var technicianResult = await CreateAsync(technician, deviceTypeIds);
+        if (technicianResult.Error != TechnicianOperationError.None)
+        {
+            await transaction.RollbackAsync();
+            return technicianResult;
+        }
+
+        var roleResult = await accounts.SetRolesAsync(user.Id, ["Technician"]);
+        if (roleResult.Error != AccountError.None)
+        {
+            await transaction.RollbackAsync();
+            return TechnicianOperationResult<Technician>.Failure(
+                TechnicianOperationError.TechnicianAccountSetupFailed);
+        }
+
+        await transaction.CommitAsync();
+        return TechnicianOperationResult<Technician>.SuccessWithTemporaryPassword(
+            technicianResult.Value!,
+            accountResult.Value!.TemporaryPassword);
+    }
+
     public async Task<TechnicianOperationResult<Technician>> UpdateAsync(
         int id,
         Technician changes,
@@ -46,10 +104,6 @@ public class TechnicianService(ITechnicianRepository repository) : ITechnicianSe
         var existing = await repository.GetByIdAsync(id);
         if (existing is null)
             return TechnicianOperationResult<Technician>.Failure(TechnicianOperationError.TechnicianNotFound);
-
-        if (existing.UserId.HasValue && existing.UserId != changes.UserId &&
-            await repository.UserHasTechnicianRoleAsync(existing.UserId.Value))
-            return TechnicianOperationResult<Technician>.Failure(TechnicianOperationError.AccountRequiresTechnicianProfile);
 
         Normalize(changes);
 
@@ -62,6 +116,58 @@ public class TechnicianService(ITechnicianRepository repository) : ITechnicianSe
         var deviceTypes = await ResolveDeviceTypesAsync(deviceTypeIds);
         if (deviceTypes is null)
             return TechnicianOperationResult<Technician>.Failure(TechnicianOperationError.DeviceTypesNotFound);
+
+        var userLinkChanged = existing.UserId != changes.UserId;
+        var oldUserHasTechnicianRole = userLinkChanged &&
+            existing.UserId.HasValue &&
+            await repository.UserHasTechnicianRoleAsync(existing.UserId.Value);
+
+        if (oldUserHasTechnicianRole && !changes.UserId.HasValue)
+            return TechnicianOperationResult<Technician>.Failure(
+                TechnicianOperationError.AccountRequiresTechnicianProfile);
+
+        await using var transaction = changes.UserId.HasValue
+            ? await repository.BeginSerializableTransactionAsync()
+            : null;
+
+        User? linkedUser = null;
+        var linkedUserHasTechnicianRole = false;
+        var linkedUserIsAdmin = false;
+        if (changes.UserId is int linkedUserId)
+        {
+            linkedUser = await accounts.GetByIdAsync(linkedUserId);
+            if (linkedUser is null)
+            {
+                if (transaction is not null) await transaction.RollbackAsync();
+                return TechnicianOperationResult<Technician>.Failure(
+                    TechnicianOperationError.UserNotFoundOrAlreadyLinked);
+            }
+
+            linkedUserHasTechnicianRole = linkedUser.UserRoles.Any(link =>
+                link.Role.IsActive && link.Role.Name == "Technician");
+            linkedUserIsAdmin = linkedUser.UserRoles.Any(link =>
+                link.Role.IsActive && link.Role.Name == "Admin");
+
+            if (userLinkChanged && (linkedUserIsAdmin || !linkedUser.IsActive || !changes.IsActive))
+            {
+                if (transaction is not null) await transaction.RollbackAsync();
+                return TechnicianOperationResult<Technician>.Failure(
+                    linkedUserIsAdmin
+                        ? TechnicianOperationError.CannotLinkAdministratorAccount
+                        : TechnicianOperationError.TechnicianAccountLinkRequiresActiveEntities);
+            }
+        }
+
+        if (userLinkChanged && oldUserHasTechnicianRole && existing.UserId is int oldUserId)
+        {
+            var oldRoleResult = await accounts.SetRolesAsync(oldUserId, ["Receptionist"]);
+            if (oldRoleResult.Error != AccountError.None)
+            {
+                if (transaction is not null) await transaction.RollbackAsync();
+                return TechnicianOperationResult<Technician>.Failure(
+                    TechnicianOperationError.TechnicianAccountSetupFailed);
+            }
+        }
 
         existing.UserId = changes.UserId;
         existing.EmployeeCode = changes.EmployeeCode;
@@ -94,6 +200,20 @@ public class TechnicianService(ITechnicianRepository repository) : ITechnicianSe
         }
 
         await repository.UpdateAsync(existing);
+
+        if (linkedUser is not null && changes.IsActive && linkedUser.IsActive &&
+            !linkedUserHasTechnicianRole && !linkedUserIsAdmin)
+        {
+            var roleResult = await accounts.SetRolesAsync(linkedUser.Id, ["Technician"]);
+            if (roleResult.Error != AccountError.None)
+            {
+                if (transaction is not null) await transaction.RollbackAsync();
+                return TechnicianOperationResult<Technician>.Failure(
+                    TechnicianOperationError.TechnicianAccountSetupFailed);
+            }
+        }
+
+        if (transaction is not null) await transaction.CommitAsync();
         return TechnicianOperationResult<Technician>.Success(existing);
     }
 

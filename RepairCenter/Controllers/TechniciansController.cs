@@ -59,6 +59,30 @@ public class TechniciansController(ITechnicianService service) : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, ToResponse(created));
     }
 
+    [HttpPost("with-account")]
+    public async Task<IActionResult> CreateWithAccount(CreateTechnicianWithAccountRequest request)
+    {
+        var technician = new Technician
+        {
+            EmployeeCode = request.EmployeeCode,
+            FullName = request.FullName,
+            PhoneNumber = request.PhoneNumber,
+            Email = request.Email,
+            Specialty = request.Specialty,
+            IsActive = request.IsActive
+        };
+
+        var result = await service.CreateWithAccountAsync(technician, request.DeviceTypeIds, request.UserName);
+        if (result.Error != TechnicianOperationError.None)
+            return ToError(result.Error).Result!;
+
+        return CreatedAtAction(nameof(GetById), new { id = result.Value!.Id }, new
+        {
+            Technician = ToResponse(result.Value),
+            result.TemporaryPassword
+        });
+    }
+
     [HttpPut("{id:int}")]
     public async Task<ActionResult<TechnicianResponse>> Update(int id, UpdateTechnicianRequest request)
     {
@@ -141,6 +165,25 @@ public class TechniciansController(ITechnicianService service) : ControllerBase
             Title = "Tài khoản Technician phải được liên kết với hồ sơ kỹ thuật viên.",
             Detail = "Hãy gỡ role Technician trước khi bỏ liên kết tài khoản khỏi hồ sơ này."
         }),
+        TechnicianOperationError.CannotLinkAdministratorAccount => Conflict(new ProblemDetails
+        {
+            Title = "Không thể liên kết tài khoản Admin với hồ sơ kỹ thuật viên.",
+            Detail = "Hãy dùng một tài khoản khác để không làm thay đổi quyền quản trị."
+        }),
+        TechnicianOperationError.TechnicianAccountLinkRequiresActiveEntities => Conflict(new ProblemDetails
+        {
+            Title = "Không thể liên kết tài khoản chưa hoạt động.",
+            Detail = "Tài khoản và hồ sơ kỹ thuật viên phải đang hoạt động để cấp quyền Technician."
+        }),
+        TechnicianOperationError.DuplicateAccountIdentity => Conflict(new ProblemDetails
+        {
+            Title = "Tên đăng nhập hoặc email đã được sử dụng.",
+            Detail = "Hãy dùng tên đăng nhập/email khác hoặc liên kết hồ sơ với tài khoản hiện có."
+        }),
+        TechnicianOperationError.TechnicianAccountSetupFailed => Problem(
+            statusCode: StatusCodes.Status500InternalServerError,
+            title: "Không thể tạo tài khoản kỹ thuật viên",
+            detail: "Không thể hoàn tất việc tạo tài khoản và hồ sơ kỹ thuật viên. Không có dữ liệu nào được lưu."),
         _ => Problem(statusCode: StatusCodes.Status500InternalServerError)
     };
 

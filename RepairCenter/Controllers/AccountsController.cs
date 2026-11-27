@@ -35,6 +35,14 @@ public class AccountsController(IAccountService accounts) : ControllerBase
         });
     }
 
+    [HttpPut("{id:int}")]
+    public async Task<ActionResult<AccountResponse>> Update(int id, UpdateAccountRequest request)
+    {
+        var result = await accounts.UpdateAsync(
+            id, request.UserName, request.FullName, request.Email, request.PhoneNumber);
+        return result.Error == AccountError.None ? Ok(ToResponse(result.Value!)) : Error(result.Error);
+    }
+
     [HttpPut("{id:int}/roles")]
     public async Task<ActionResult<AccountResponse>> SetRoles(int id, UpdateAccountRolesRequest request)
     {

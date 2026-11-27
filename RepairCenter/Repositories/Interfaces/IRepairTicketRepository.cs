@@ -12,6 +12,7 @@ public interface IRepairTicketRepository
         DateTime? receivedFrom, DateTime? receivedTo, string? search, bool oldestFirst);
     Task<RepairTicket?> GetByIdAsync(int id);
     Task<RepairTicket?> GetByTicketNumberAsync(string ticketNumber);
+    Task<List<RepairTicket>> GetOpenByDeviceAsync(int deviceId);
     Task<RepairTicket?> GetForUpdateAsync(int id);
     Task<List<RepairTicketStatusHistory>> GetStatusHistoryAsync(int repairTicketId);
     Task<bool> CustomerExistsAsync(int customerId);

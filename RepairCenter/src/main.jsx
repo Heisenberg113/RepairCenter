@@ -28,7 +28,7 @@ function Navigation(){
     let cancelled=false,requestId=0;
     const refreshNotifications=async()=>{
       const currentRequest=++requestId,bridge=window.repairCenterBridge;
-      if(!bridge?.token){setNotifications({counts:{},errors:{}});return}
+      if(!bridge?.token||bridge.user?.mustChangePassword){setNotifications({counts:{},errors:{}});return}
       const counts={},errors={},tasks=[];
       const load=async(keys,action)=>{try{await action()}catch{keys.forEach(key=>{errors[key]=true})}};
       if(bridge.can('Admin','Receptionist'))
@@ -92,15 +92,15 @@ function ToastHost(){
 }
 
 function Login({ mode, onModeChange }) {
-  const [error,setError]=React.useState(''),[notice,setNotice]=React.useState('');
-  const submitLogin=async e=>{e.preventDefault();setError('');setNotice('');const f=new FormData(e.currentTarget);try{const r=await window.repairCenterBridge.api('/api/auth/login',{method:'POST',body:{userName:f.get('userName'),password:f.get('password')}});window.repairCenterBridge.completeLogin(r)}catch(err){setError(err.message||'Không thể đăng nhập.')}};
-  const submitPassword=async e=>{e.preventDefault();setError('');const f=new FormData(e.currentTarget),currentPassword=f.get('currentPassword'),newPassword=f.get('newPassword');if(newPassword!==f.get('confirmPassword')){setError('Mật khẩu xác nhận không khớp.');return}try{await window.repairCenterBridge.api('/api/auth/change-temporary-password',{method:'POST',body:{currentPassword,newPassword}});window.logout(false);onModeChange('login');setNotice('Đổi mật khẩu thành công. Vui lòng đăng nhập lại bằng mật khẩu mới.')}catch(err){setError(err.message||'Không thể đổi mật khẩu.')}};
+  const [error,setError]=React.useState(''),[notice,setNotice]=React.useState(''),[temporaryPassword,setTemporaryPassword]=React.useState('');
+  const submitLogin=async e=>{e.preventDefault();setError('');setNotice('');const f=new FormData(e.currentTarget),password=String(f.get('password')||'');try{const r=await window.repairCenterBridge.api('/api/auth/login',{method:'POST',body:{userName:f.get('userName'),password}});setTemporaryPassword(r.mustChangePassword?password:'');window.repairCenterBridge.completeLogin(r)}catch(err){setError(err.message||'Không thể đăng nhập.')}};
+  const submitPassword=async e=>{e.preventDefault();setError('');const f=new FormData(e.currentTarget),currentPassword=f.get('currentPassword'),newPassword=f.get('newPassword');if(newPassword!==f.get('confirmPassword')){setError('Mật khẩu xác nhận không khớp.');return}try{await window.repairCenterBridge.api('/api/auth/change-temporary-password',{method:'POST',body:{currentPassword,newPassword}});setTemporaryPassword('');window.logout(false);onModeChange('login');setNotice('Đổi mật khẩu thành công. Vui lòng đăng nhập lại bằng mật khẩu mới.')}catch(err){setError(err.message||'Không thể đổi mật khẩu.')}};
   return h('div',{className:`login-shell ${mode==='login'||mode==='change'?'':'hidden'}`},h('div',{className:'login-card'},
     h('div',{className:'brand-mark'},'R'),h('p',{className:'eyebrow'},'REPAIR CENTER'),
     h('h1',null,mode==='change'?'Đổi mật khẩu tạm':'Đăng nhập'),
     h('p',{className:'muted'},'Quản lý tiếp nhận và vận hành trung tâm sửa chữa.'),
-    mode==='change'?h('form',{onSubmit:submitPassword},h('p',{className:'field-note'},'Đây là mật khẩu tạm. Hãy tạo mật khẩu mới để tiếp tục.'),
-      h('label',null,'Mật khẩu tạm',h('input',{name:'currentPassword',type:'password',autoComplete:'current-password',required:true})),
+    mode==='change'?h('form',{onSubmit:submitPassword},h('p',{className:'login-success'},'Đăng nhập thành công. Đây là mật khẩu tạm; hãy tạo mật khẩu mới để tiếp tục.'),
+      h('label',null,'Mật khẩu tạm',h('input',{name:'currentPassword',type:'password',autoComplete:'current-password',defaultValue:temporaryPassword,required:true})),
       h('label',null,'Mật khẩu mới (ít nhất 12 ký tự)',h('input',{name:'newPassword',type:'password',autoComplete:'new-password',minLength:12,required:true})),
       h('label',null,'Nhập lại mật khẩu mới',h('input',{name:'confirmPassword',type:'password',autoComplete:'new-password',minLength:12,required:true})),
       h('button',{className:'button primary wide'},'Đổi mật khẩu và tiếp tục')):

@@ -69,6 +69,14 @@ public class RepairTicketsController(
         return Ok(ToResponse(ticket));
     }
 
+    [HttpGet("devices/{deviceId:int}/open")]
+    [Authorize(Roles = "Admin,Receptionist")]
+    public async Task<ActionResult<IEnumerable<RepairTicketResponse>>> GetOpenByDevice(int deviceId)
+    {
+        var tickets = await service.GetOpenByDeviceAsync(deviceId);
+        return Ok(tickets.Select(ToResponse));
+    }
+
     [HttpPut("{id:int}/technician")]
     [Authorize(Roles = "Admin,Receptionist")]
     public async Task<ActionResult<RepairTicketResponse>> AssignTechnician(
@@ -390,6 +398,7 @@ public class RepairTicketsController(
         if (User.IsInRole("Technician"))
         {
             return (current, next) is
+                (RepairStatus.Received, RepairStatus.Diagnosing) or
                 (RepairStatus.Diagnosing, RepairStatus.WaitingForApproval) or
                 (RepairStatus.InProgress, RepairStatus.WaitingForParts) or
                 (RepairStatus.WaitingForParts, RepairStatus.InProgress) or

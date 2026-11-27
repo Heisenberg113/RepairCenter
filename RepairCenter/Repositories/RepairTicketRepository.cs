@@ -87,6 +87,20 @@ public class RepairTicketRepository(RepairCenterDbContext context) : IRepairTick
         .Include(ticket => ticket.Technician)
         .FirstOrDefaultAsync(ticket => ticket.TicketNumber == ticketNumber.Trim());
 
+    public Task<List<RepairTicket>> GetOpenByDeviceAsync(int deviceId) => context.RepairTickets
+        .AsNoTracking()
+        .Include(ticket => ticket.ParentRepairTicket)
+        .Include(ticket => ticket.Customer)
+        .Include(ticket => ticket.Device)
+            .ThenInclude(device => device.DeviceType)
+        .Include(ticket => ticket.Technician)
+        .Where(ticket => ticket.DeviceId == deviceId &&
+            ticket.Status != RepairCenter.Enums.RepairStatus.Delivered &&
+            ticket.Status != RepairCenter.Enums.RepairStatus.Cancelled)
+        .OrderByDescending(ticket => ticket.ReceivedAt)
+        .ThenByDescending(ticket => ticket.Id)
+        .ToListAsync();
+
     public Task<RepairTicket?> GetForUpdateAsync(int id) => context.RepairTickets
         .Include(ticket => ticket.Customer)
         .Include(ticket => ticket.Device)

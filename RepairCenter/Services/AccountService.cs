@@ -43,6 +43,7 @@ public class AccountService(IAccountRepository repository, IPasswordHasher<User>
     }
 
     public async Task<List<User>> GetAllAsync() => await repository.GetAllAsync();
+    public Task<User?> GetByIdAsync(int id) => repository.GetByIdAsync(id);
     public async Task<List<string>> GetRolesAsync() => (await repository.GetAllRolesAsync()).Select(x => x.Name).ToList();
 
     public async Task<AccountResult<(User User, string TemporaryPassword)>> CreateAsync(User user, IEnumerable<string> roleNames)
@@ -60,6 +61,39 @@ public class AccountService(IAccountRepository repository, IPasswordHasher<User>
         user.MustChangePassword = true;
         await repository.AddAsync(user, roles);
         return AccountResult<(User, string)>.Success((user, temporaryPassword));
+    }
+
+    public async Task<AccountResult<User>> UpdateAsync(
+        int id,
+        string userName,
+        string fullName,
+        string email,
+        string? phoneNumber)
+    {
+        var user = await repository.GetByIdAsync(id);
+        if (user is null) return AccountResult<User>.Failure(AccountError.AccountNotFound);
+
+        userName = userName.Trim();
+        fullName = fullName.Trim();
+        email = email.Trim().ToLowerInvariant();
+        phoneNumber = Normalize(phoneNumber);
+
+        if (await repository.IdentityExistsAsync(userName, email, id))
+            return AccountResult<User>.Failure(AccountError.DuplicateIdentity);
+
+        var changed = user.UserName != userName ||
+            user.FullName != fullName ||
+            user.Email != email ||
+            user.PhoneNumber != phoneNumber;
+        if (!changed) return AccountResult<User>.Success(user);
+
+        user.UserName = userName;
+        user.FullName = fullName;
+        user.Email = email;
+        user.PhoneNumber = phoneNumber;
+        user.TokenVersion++;
+        await repository.SaveAsync();
+        return AccountResult<User>.Success(user);
     }
 
     public async Task<AccountResult<User>> SetRolesAsync(int id, IEnumerable<string> roleNames)

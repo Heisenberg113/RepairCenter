@@ -45,7 +45,7 @@ async function api(path, options={}){
   const isTicketMutation=String(options.method||'GET').toUpperCase()!=='GET'&&path.startsWith('/api/repair-tickets');
   const notifyTicketMutation=()=>{if(isTicketMutation)window.dispatchEvent(new CustomEvent('repair-tickets-changed',{detail:{path,method:String(options.method||'GET').toUpperCase()}}))};
   const response=await fetch(path,{...options,headers:{...headers,...options.headers},body:options.body?JSON.stringify(options.body):undefined});
-  if(response.status===401){logout(false);throw new Error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.')}
+  if(response.status===401&&path!=='/api/auth/login'){logout(false);throw new Error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.')}
   if(response.status===204){notifyTicketMutation();return null;}
   const text=await response.text();let data=null;try{data=text?JSON.parse(text):null}catch{data=text}
   if(!response.ok){
@@ -174,6 +174,7 @@ async function exportInvoice(ticketId){
   }catch(e){win.close();toast(errText(e),true)}
 }
 function accountForm(){window.openWorkflowDialog?.("account")}
+function editAccount(id){const user=(state.data.users||[]).find(x=>Number(x.id)===Number(id));if(!user)return toast('Không tìm thấy tài khoản cần sửa.',true);window.openWorkflowDialog?.("accountEdit",{id,item:user})}
 function editRoles(id){window.openWorkflowDialog?.("roles",{id})}
 async function toggleAccount(id,isActive){try{await api(`/api/accounts/${id}/active`,{method:'PATCH',body:{isActive}});toast('Đã cập nhật trạng thái tài khoản');window.refreshAccountsReact?.()}catch(e){toast(errText(e),true)}}
 async function revokeAccount(id){if(!confirm('Thu hồi tất cả token của tài khoản này?'))return;try{await api(`/api/accounts/${id}/revoke-tokens`,{method:'POST'});toast('Đã thu hồi token')}catch(e){toast(errText(e),true)}}
@@ -228,6 +229,7 @@ window.repairCenterBridge = {
   cancelCatalogRequest,
   resolveCatalogRequest,
   accountForm,
+  editAccount,
   editRoles,
   toggleAccount,
   revokeAccount,
@@ -297,6 +299,7 @@ window.openQuoteVersion = openQuoteVersion;
 window.recordQuoteResponse = recordQuoteResponse;
 window.changeStatus = changeStatus;
 window.accountForm = accountForm;
+window.editAccount = editAccount;
 window.editRoles = editRoles;
 window.toggleAccount = toggleAccount;
 window.revokeAccount = revokeAccount;

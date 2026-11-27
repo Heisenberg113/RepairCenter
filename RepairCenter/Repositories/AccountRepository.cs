@@ -26,12 +26,15 @@ public class AccountRepository(RepairCenterDbContext db) : IAccountRepository
     public async Task<(User? User, bool LastActiveAdmin)> UpdateRolesSafelyAsync(
         int userId, IReadOnlyCollection<Role> roles)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        var ownsTransaction = db.Database.CurrentTransaction is null;
+        await using var transaction = ownsTransaction
+            ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable)
+            : null;
         var user = await db.Users.Include(x => x.UserRoles).ThenInclude(x => x.Role)
             .FirstOrDefaultAsync(x => x.Id == userId);
         if (user is null)
         {
-            await transaction.RollbackAsync();
+            if (transaction is not null) await transaction.RollbackAsync();
             return (null, false);
         }
 
@@ -39,7 +42,7 @@ public class AccountRepository(RepairCenterDbContext db) : IAccountRepository
         var willRemainAdmin = roles.Any(x => x.IsActive && x.Name == "Admin");
         if (wasActiveAdmin && !willRemainAdmin && await CountActiveAdminsAsync() <= 1)
         {
-            await transaction.RollbackAsync();
+            if (transaction is not null) await transaction.RollbackAsync();
             return (user, true);
         }
 
@@ -48,7 +51,7 @@ public class AccountRepository(RepairCenterDbContext db) : IAccountRepository
             user.UserRoles.Add(new UserRole { UserId = userId, RoleId = role.Id, User = user, Role = role });
         user.TokenVersion++;
         await db.SaveChangesAsync();
-        await transaction.CommitAsync();
+        if (transaction is not null) await transaction.CommitAsync();
         return (user, false);
     }
 

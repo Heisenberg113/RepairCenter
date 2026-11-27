@@ -39,6 +39,8 @@
 .nav-count{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;min-width:20px;height:20px;margin-left:auto;padding:0 6px;border-radius:999px;background:#d64d59;color:#fff;font-size:10px;font-weight:800;line-height:1}
 .nav-count.failed{background:#b9770e}
 
+.field-label{display:block}
+.required-mark{color:var(--red);font-weight:800}
 .lookup-list{display:grid;gap:6px;max-height:220px;overflow:auto;overscroll-behavior:contain}
 .lookup-option{display:grid;gap:4px;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
 .lookup-option:hover,.lookup-option:focus{border-color:#9aabff;background:var(--blue-soft)}
@@ -47,3 +49,14 @@
 .lookup-selected>div{display:grid;gap:5px;min-width:0}
 .lookup-selected>div strong{overflow-wrap:anywhere}
 @media(max-width:700px){.lookup-selected{align-items:flex-start;flex-direction:column}}
+
+.form-grid>label.technician-account-toggle{display:flex;align-items:center;gap:8px;cursor:pointer}
+.form-grid>label.technician-account-toggle>input[type=checkbox]{width:16px;height:16px;flex:0 0 16px;margin:0;padding:0;align-self:center}
+.login-success{margin:0 0 12px;padding:10px 12px;border-radius:8px;background:var(--green-soft);color:var(--green);font-size:12px;line-height:1.5}
+.intake-ticket-warning{padding:12px;border:1px solid #e6b94a;border-radius:9px;background:var(--amber-soft);color:#805808;font-size:11px}
+.intake-ticket-warning>p{margin:6px 0 10px;line-height:1.5}
+.intake-open-ticket-list{display:grid;gap:8px}
+.intake-open-ticket{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid #eed99f;border-radius:8px;background:#fff}
+.intake-open-ticket>div{display:grid;gap:4px;min-width:0}
+.intake-open-ticket span{color:var(--muted);overflow-wrap:anywhere}
+@media(max-width:700px){.intake-open-ticket{align-items:flex-start;flex-direction:column}}

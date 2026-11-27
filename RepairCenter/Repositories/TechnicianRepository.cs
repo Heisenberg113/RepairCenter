@@ -1,4 +1,6 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using RepairCenter.Data;
 using RepairCenter.Entities;
 using RepairCenter.Repositories.Interfaces;
@@ -58,6 +60,9 @@ public class TechnicianRepository(RepairCenterDbContext context) : ITechnicianRe
 
     public Task<bool> HasRepairTicketsAsync(int technicianId) =>
         context.RepairTickets.AnyAsync(ticket => ticket.TechnicianId == technicianId);
+
+    public Task<IDbContextTransaction> BeginSerializableTransactionAsync() =>
+        context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
 
     public async Task AddAsync(Technician technician)
     {
